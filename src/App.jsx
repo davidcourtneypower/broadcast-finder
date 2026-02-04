@@ -164,6 +164,74 @@ function App() {
     }
   }
 
+  const refreshMatchBroadcasts = async (matchId) => {
+    // Refresh only the broadcasts for a specific match (not the whole page)
+    try {
+      // Fetch broadcasts for this match
+      const { data: broadcasts, error: broadcastsError } = await supabase
+        .from("broadcasts")
+        .select("*")
+        .eq("match_id", matchId)
+
+      if (broadcastsError) {
+        console.error("Error loading broadcasts:", broadcastsError)
+        return
+      }
+
+      const broadcastIds = (broadcasts || []).map(b => b.id)
+
+      // Fetch votes for these broadcasts
+      let votes = []
+      if (broadcastIds.length > 0) {
+        const { data: votesData, error: votesError } = await supabase
+          .from("votes")
+          .select("*")
+          .in("broadcast_id", broadcastIds)
+
+        if (votesError) {
+          console.error("Error loading votes:", votesError)
+        } else {
+          votes = votesData || []
+        }
+      }
+
+      // Build vote statistics
+      const votesByBroadcast = {}
+      votes.forEach(v => {
+        if (!votesByBroadcast[v.broadcast_id]) {
+          votesByBroadcast[v.broadcast_id] = { up: 0, down: 0, myVote: null }
+        }
+
+        if (v.vote_type === "up") {
+          votesByBroadcast[v.broadcast_id].up++
+        } else if (v.vote_type === "down") {
+          votesByBroadcast[v.broadcast_id].down++
+        }
+
+        if (user && (v.user_id_uuid === user.id || v.user_id === user.id)) {
+          votesByBroadcast[v.broadcast_id].myVote = v.vote_type
+        }
+      })
+
+      // Update only this match's broadcasts in state
+      setMatches(prev => prev.map(m => {
+        if (m.id !== matchId) return m
+
+        const updatedBroadcasts = (broadcasts || []).map(b => ({
+          ...b,
+          voteStats: votesByBroadcast[b.id] || { up: 0, down: 0, myVote: null }
+        }))
+
+        return {
+          ...m,
+          broadcasts: updatedBroadcasts
+        }
+      }))
+    } catch (e) {
+      console.error("Unexpected error refreshing match broadcasts:", e)
+    }
+  }
+
   const handleBroadcastsViewed = async (matchId) => {
     // Auto-refresh when user views broadcasts (per-fixture with exponential backoff)
     const now = Date.now()
@@ -188,8 +256,8 @@ function App() {
       }
     }))
 
-    // Perform refresh
-    await handleRefresh(true)
+    // Refresh only this match's broadcasts (targeted refresh)
+    await refreshMatchBroadcasts(matchId)
   }
   
   const handleAddBroadcast = async (matchId, country, channel) => {
