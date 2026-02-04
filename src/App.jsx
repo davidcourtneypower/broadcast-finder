@@ -28,6 +28,12 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [displayLimit, setDisplayLimit] = useState(20) // Pagination: show 20 fixtures initially
+  const [lastRefreshTime, setLastRefreshTime] = useState(0)
+  const [refreshCooldown, setRefreshCooldown] = useState(0)
+
+  // Rate limiting constants
+  const REFRESH_COOLDOWN_SECONDS = 30
+  const AUTO_REFRESH_COOLDOWN_SECONDS = 10 // Shorter cooldown for auto-refresh
 
   const loadMatches = async () => {
     setLoading(true)
@@ -126,10 +132,38 @@ function App() {
     setLoading(false)
   }
   
-  const handleRefresh = async () => {
+  // Cooldown timer effect
+  useEffect(() => {
+    if (refreshCooldown > 0) {
+      const timer = setInterval(() => {
+        setRefreshCooldown(prev => Math.max(0, prev - 1))
+      }, 1000)
+      return () => clearInterval(timer)
+    }
+  }, [refreshCooldown])
+
+  const handleRefresh = async (isAutoRefresh = false) => {
+    const now = Date.now()
+    const timeSinceLastRefresh = (now - lastRefreshTime) / 1000
+    const requiredCooldown = isAutoRefresh ? AUTO_REFRESH_COOLDOWN_SECONDS : REFRESH_COOLDOWN_SECONDS
+
+    // Check if we're still in cooldown period
+    if (timeSinceLastRefresh < requiredCooldown) {
+      const remaining = Math.ceil(requiredCooldown - timeSinceLastRefresh)
+      setRefreshCooldown(remaining)
+      return
+    }
+
     setRefreshing(true)
+    setLastRefreshTime(now)
     await loadMatches()
     setRefreshing(false)
+    setRefreshCooldown(isAutoRefresh ? AUTO_REFRESH_COOLDOWN_SECONDS : REFRESH_COOLDOWN_SECONDS)
+  }
+
+  const handleBroadcastsViewed = async () => {
+    // Auto-refresh when user views broadcasts
+    await handleRefresh(true)
   }
   
   const handleAddBroadcast = async (matchId, country, channel) => {
@@ -435,11 +469,27 @@ function App() {
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            {isAdmin && (
-              <button onClick={handleRefresh} disabled={refreshing} style={{ display: "flex", alignItems: "center", gap: 4, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 7, padding: "4px 8px", color: refreshing ? "#555" : "#aaa", fontSize: 10, cursor: refreshing ? "not-allowed" : "pointer", fontFamily: "monospace" }}>
-                <Icon name="refresh" size={11} color={refreshing ? "#555" : "#aaa"} />{refreshing ? "..." : "Sync"}
-              </button>
-            )}
+            <button
+              onClick={() => handleRefresh(false)}
+              disabled={refreshing || refreshCooldown > 0}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+                background: refreshCooldown > 0 ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.06)",
+                border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: 7,
+                padding: "4px 8px",
+                color: (refreshing || refreshCooldown > 0) ? "#555" : "#aaa",
+                fontSize: 10,
+                cursor: (refreshing || refreshCooldown > 0) ? "not-allowed" : "pointer",
+                fontFamily: "monospace"
+              }}
+              title={refreshCooldown > 0 ? `Wait ${refreshCooldown}s` : "Refresh broadcasts"}
+            >
+              <Icon name="refresh" size={11} color={(refreshing || refreshCooldown > 0) ? "#555" : "#aaa"} />
+              {refreshing ? "..." : refreshCooldown > 0 ? `${refreshCooldown}s` : "Refresh"}
+            </button>
             {isAdmin && (
               <button onClick={() => setShowAdminPanel(true)} style={{ display: "flex", alignItems: "center", gap: 4, background: "rgba(0,229,255,0.15)", border: "1px solid rgba(0,229,255,0.3)", borderRadius: 7, padding: "4px 8px", color: "#00e5ff", fontSize: 10, cursor: "pointer", fontFamily: "monospace" }}>
                 <Icon name="settings" size={11} /> Admin
@@ -563,6 +613,7 @@ function App() {
                   onVote={handleVote}
                   onRequestAuth={() => setShowAuth(true)}
                   onAddBroadcast={openAddBroadcast}
+                  onBroadcastsViewed={handleBroadcastsViewed}
                 />
               ))}
             </div>

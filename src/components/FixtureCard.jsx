@@ -5,10 +5,21 @@ import { SPORT_COLORS } from '../config/constants'
 import { useUserPreferences } from '../hooks/useUserPreferences'
 import { getTimezoneAbbreviation } from '../utils/timeFormatting'
 
-export const FixtureCard = ({ match, user, onVote, onRequestAuth, onAddBroadcast }) => {
+export const FixtureCard = ({ match, user, onVote, onRequestAuth, onAddBroadcast, onBroadcastsViewed }) => {
   const [expanded, setExpanded] = useState(false)
   const [relativeTime, setRelativeTime] = useState('')
   const col = SPORT_COLORS[match.sport] || { accent: "#00e5ff", bg: "rgba(0,229,255,0.12)", glow: "rgba(0,229,255,0.25)" }
+
+  // Handle expansion and trigger refresh
+  const handleToggleExpanded = () => {
+    const newExpandedState = !expanded
+    setExpanded(newExpandedState)
+
+    // If expanding, trigger auto-refresh to get latest broadcast data
+    if (newExpandedState && onBroadcastsViewed) {
+      onBroadcastsViewed()
+    }
+  }
 
   // Use user preferences for timezone conversion
   const { formatTime, getStatus, getRelative, preferences } = useUserPreferences(user)
@@ -98,7 +109,7 @@ export const FixtureCard = ({ match, user, onVote, onRequestAuth, onAddBroadcast
         )}
       </div>
       <button
-        onClick={() => setExpanded(!expanded)}
+        onClick={handleToggleExpanded}
         style={{
           width: "100%",
           background: "rgba(255,255,255,0.03)",
