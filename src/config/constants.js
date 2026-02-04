@@ -1,0 +1,48 @@
+import { SPORTS_CONFIG } from './sports'
+
+// Build SPORT_COLORS from sports config
+export const SPORT_COLORS = Object.fromEntries(
+  Object.entries(SPORTS_CONFIG).map(([name, config]) => [
+    name,
+    {
+      ...config.colors,
+      glow: config.colors.accent.replace(')', ', 0.25)').replace('rgb', 'rgba')
+    }
+  ])
+)
+
+export const CHANNELS_BY_COUNTRY = {
+  "USA": ["ESPN", "ESPN+", "FOX", "CBS", "NBC", "ABC", "TNT", "NBA TV", "Peacock", "Paramount+", "Hulu Live", "fuboTV", "Bally Sports"],
+  "UK": ["Sky Sports", "BT Sport", "BBC", "ITV", "Amazon Prime Video UK", "DAZN UK", "TNT Sports"],
+  "Canada": ["TSN", "Sportsnet", "CBC", "RDS", "DAZN Canada"],
+  "Australia": ["Fox Sports", "Kayo Sports", "Optus Sport", "ESPN Australia"],
+  "India": ["Star Sports", "Hotstar", "JioTV", "Sports18", "Sony LIV"],
+  "Germany": ["Sky Deutschland", "DAZN Germany", "Sport1", "MagentaSport"],
+  "France": ["Canal+", "beIN Sports France", "RMC Sport"],
+  "Spain": ["Movistar+", "DAZN Spain", "LaLiga TV"],
+  "Italy": ["Sky Italia", "DAZN Italy", "Rai Sport"],
+  "China": ["CCTV-5", "Tencent Sports", "iQIYI Sports", "Migu Video"],
+  "Turkey": ["beIN Sports Turkey", "S Sport", "TRT Spor"],
+  "Greece": ["Cosmote Sport", "ERT Sports", "Nova Sports"],
+  "Lithuania": ["TV3 Sport", "Go3"],
+  "Serbia": ["Arena Sport", "RTS"],
+  "Russia": ["Match TV", "Okko Sport"],
+  "Argentina": ["ESPN Argentina", "TyC Sports", "DeporTV"],
+  "Brazil": ["ESPN Brasil", "SporTV", "Band Sports"],
+  "Mexico": ["ESPN Mexico", "FOX Sports Mexico", "TUDN"],
+  "Japan": ["WOWOW", "J Sports", "DAZN Japan"],
+  "Global": ["DAZN", "ESPN International", "beIN Sports", "Eurosport", "NBA League Pass"]
+}
+
+export const COUNTRIES = Object.keys(CHANNELS_BY_COUNTRY)
+
+export const DATE_TABS = ["Today", "Tomorrow", "This Week"]
+
+export const FLAG_MAP = {
+  USA: "🇺🇸", UK: "🇬🇧", Canada: "🇨🇦", Australia: "🇦🇺",
+  India: "🇮🇳", Germany: "🇩🇪", France: "🇫🇷", Spain: "🇪🇸",
+  Italy: "🇮🇹", Portugal: "🇵🇹", Sudan: "🇸🇩",
+  China: "🇨🇳", Turkey: "🇹🇷", Greece: "🇬🇷", Lithuania: "🇱🇹",
+  Serbia: "🇷🇸", Russia: "🇷🇺", Argentina: "🇦🇷", Brazil: "🇧🇷",
+  Mexico: "🇲🇽", Japan: "🇯🇵", Global: "🌍"
+}

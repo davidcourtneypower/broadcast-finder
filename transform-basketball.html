@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Basketball API Transformer</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: #0e0e1a;
+            color: #fff;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #00e5ff;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #888;
+            margin-bottom: 30px;
+        }
+
+        .section {
+            background: #1a1a2e;
+            border: 1px solid #2a2a4a;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            color: #aaa;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 300px;
+            padding: 12px;
+            background: #111122;
+            border: 1px solid #2a2a4a;
+            border-radius: 8px;
+            color: #fff;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            resize: vertical;
+        }
+
+        button {
+            background: linear-gradient(135deg, #00e5ff, #7c4dff);
+            color: #fff;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        button:disabled {
+            background: #2a2a4a;
+            cursor: not-allowed;
+        }
+
+        .info {
+            background: rgba(0, 229, 255, 0.1);
+            border: 1px solid rgba(0, 229, 255, 0.3);
+            padding: 12px;
+            border-radius: 8px;
+            color: #00e5ff;
+            font-size: 13px;
+            margin-bottom: 15px;
+        }
+
+        .error {
+            background: rgba(244, 67, 54, 0.15);
+            border: 1px solid rgba(244, 67, 54, 0.3);
+            padding: 12px;
+            border-radius: 8px;
+            color: #e57373;
+            font-size: 13px;
+            margin-top: 15px;
+        }
+
+        .success {
+            background: rgba(76, 175, 80, 0.15);
+            border: 1px solid rgba(76, 175, 80, 0.3);
+            padding: 12px;
+            border-radius: 8px;
+            color: #81c784;
+            font-size: 13px;
+            margin-top: 15px;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .stat {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: #00e5ff;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏀 Basketball API Transformer</h1>
+        <p class="subtitle">Transform Basketball API-Sports.io responses to BroadcastFinder format</p>
+
+        <div class="section">
+            <div class="info">
+                <strong>How to use:</strong><br>
+                1. Get your API response from: <code>https://v1.basketball.api-sports.io/games?date=YYYY-MM-DD</code><br>
+                2. Paste the full JSON response below<br>
+                3. Click "Transform"<br>
+                4. Copy the output and import it via the Admin Panel
+            </div>
+
+            <label for="input">Basketball API Response (JSON):</label>
+            <textarea id="input" placeholder='Paste API response here, e.g., {"get":"games","parameters":{"date":"2026-02-04"},"response":[...]}'></textarea>
+
+            <div style="margin-top: 15px;">
+                <button onclick="transform()">Transform to BroadcastFinder Format</button>
+                <button onclick="clearAll()">Clear</button>
+            </div>
+
+            <div id="error"></div>
+            <div id="success"></div>
+        </div>
+
+        <div class="section" id="outputSection" style="display: none;">
+            <label for="output">Transformed Matches (Ready for Import):</label>
+            <textarea id="output" readonly></textarea>
+
+            <div id="stats" class="stats"></div>
+
+            <div style="margin-top: 15px;">
+                <button onclick="copyOutput()">Copy to Clipboard</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function transformGame(game) {
+            const date = game.date.split('T')[0];
+            const time = game.time;
+
+            let status = 'upcoming';
+            if (['LIVE', 'Q1', 'Q2', 'Q3', 'Q4', 'OT', 'HT'].includes(game.status.short)) {
+                status = 'live';
+            } else if (['FT', 'AOT'].includes(game.status.short)) {
+                status = 'finished';
+            }
+
+            let popularity = 50;
+            const leagueName = game.league.name.toLowerCase();
+
+            if (leagueName.includes('nba') && !leagueName.includes('g league')) {
+                popularity = 95;
+            } else if (leagueName.includes('euroleague')) {
+                popularity = 85;
+            } else if (leagueName.includes('eurocup')) {
+                popularity = 75;
+            } else if (leagueName.includes('g league')) {
+                popularity = 70;
+            } else if (leagueName.includes('ncaa')) {
+                popularity = 80;
+            } else if (leagueName.includes('fiba')) {
+                popularity = 75;
+            } else if (leagueName.includes('olympics') || leagueName.includes('world cup')) {
+                popularity = 90;
+            }
+
+            return {
+                id: `basketball-${game.id}`,
+                sport: 'Basketball',
+                league: game.league.name,
+                home: game.teams.home.name,
+                away: game.teams.away.name,
+                date: date,
+                time: time,
+                country: game.country.name,
+                status: status,
+                popularity: popularity
+            };
+        }
+
+        function transform() {
+            const input = document.getElementById('input').value.trim();
+            const errorDiv = document.getElementById('error');
+            const successDiv = document.getElementById('success');
+            const outputSection = document.getElementById('outputSection');
+            const output = document.getElementById('output');
+            const statsDiv = document.getElementById('stats');
+
+            errorDiv.innerHTML = '';
+            successDiv.innerHTML = '';
+            errorDiv.style.display = 'none';
+            successDiv.style.display = 'none';
+            outputSection.style.display = 'none';
+
+            if (!input) {
+                errorDiv.innerHTML = 'Please paste the API response';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            try {
+                const apiResponse = JSON.parse(input);
+
+                if (!apiResponse.response || !Array.isArray(apiResponse.response)) {
+                    throw new Error('Invalid API response format. Expected "response" array.');
+                }
+
+                const matches = apiResponse.response
+                    .filter(game => game.teams && game.teams.home && game.teams.away)
+                    .map(transformGame);
+
+                if (matches.length === 0) {
+                    throw new Error('No valid games found in the response');
+                }
+
+                output.value = JSON.stringify(matches, null, 2);
+                outputSection.style.display = 'block';
+
+                // Calculate stats
+                const liveCount = matches.filter(m => m.status === 'live').length;
+                const upcomingCount = matches.filter(m => m.status === 'upcoming').length;
+                const finishedCount = matches.filter(m => m.status === 'finished').length;
+                const countries = [...new Set(matches.map(m => m.country))].length;
+                const leagues = [...new Set(matches.map(m => m.league))].length;
+
+                statsDiv.innerHTML = `
+                    <div class="stat">
+                        <div class="stat-value">${matches.length}</div>
+                        <div class="stat-label">Total Matches</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value">${liveCount}</div>
+                        <div class="stat-label">Live</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value">${upcomingCount}</div>
+                        <div class="stat-label">Upcoming</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value">${finishedCount}</div>
+                        <div class="stat-label">Finished</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value">${countries}</div>
+                        <div class="stat-label">Countries</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value">${leagues}</div>
+                        <div class="stat-label">Leagues</div>
+                    </div>
+                `;
+
+                successDiv.innerHTML = `✓ Successfully transformed ${matches.length} basketball games!`;
+                successDiv.style.display = 'block';
+            } catch (e) {
+                errorDiv.innerHTML = `<strong>Error:</strong> ${e.message}`;
+                errorDiv.style.display = 'block';
+            }
+        }
+
+        function copyOutput() {
+            const output = document.getElementById('output');
+            output.select();
+            document.execCommand('copy');
+
+            const successDiv = document.getElementById('success');
+            successDiv.innerHTML = '✓ Copied to clipboard! Now paste it into the Admin Panel Import tab.';
+            successDiv.style.display = 'block';
+        }
+
+        function clearAll() {
+            document.getElementById('input').value = '';
+            document.getElementById('output').value = '';
+            document.getElementById('error').innerHTML = '';
+            document.getElementById('success').innerHTML = '';
+            document.getElementById('error').style.display = 'none';
+            document.getElementById('success').style.display = 'none';
+            document.getElementById('outputSection').style.display = 'none';
+        }
+    </script>
+</body>
+</html>
