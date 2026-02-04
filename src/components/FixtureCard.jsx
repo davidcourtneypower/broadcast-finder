@@ -5,58 +5,10 @@ import { SPORT_COLORS } from '../config/constants'
 import { useUserPreferences } from '../hooks/useUserPreferences'
 import { getTimezoneAbbreviation } from '../utils/timeFormatting'
 
-export const FixtureCard = ({ match, user, onVote, onRequestAuth, onAddBroadcast, onBroadcastsViewed, fixtureRefreshData }) => {
+export const FixtureCard = ({ match, user, onVote, onRequestAuth, onAddBroadcast }) => {
   const [expanded, setExpanded] = useState(false)
   const [relativeTime, setRelativeTime] = useState('')
-  const [isRefreshing, setIsRefreshing] = useState(false)
-  const [cooldownRemaining, setCooldownRemaining] = useState(0)
   const col = SPORT_COLORS[match.sport] || { accent: "#00e5ff", bg: "rgba(0,229,255,0.12)", glow: "rgba(0,229,255,0.25)" }
-
-  const BASE_AUTO_REFRESH_COOLDOWN = 5 // Must match App.jsx constant
-
-  // Handle expansion and trigger auto-refresh
-  const handleToggleExpanded = () => {
-    const newExpandedState = !expanded
-    setExpanded(newExpandedState)
-
-    // If expanding, trigger auto-refresh to get latest broadcast data
-    if (newExpandedState && onBroadcastsViewed) {
-      onBroadcastsViewed(match.id)
-    }
-  }
-
-  // Handle manual refresh button click
-  const handleManualRefresh = async () => {
-    if (!onBroadcastsViewed) return
-
-    // Use the same tracking system as auto-refresh
-    setIsRefreshing(true)
-    await onBroadcastsViewed(match.id)
-    setIsRefreshing(false)
-  }
-
-  // Cooldown timer
-  useEffect(() => {
-    if (cooldownRemaining > 0) {
-      const timer = setInterval(() => {
-        setCooldownRemaining(prev => Math.max(0, prev - 1))
-      }, 1000)
-      return () => clearInterval(timer)
-    }
-  }, [cooldownRemaining])
-
-  // Update cooldown when fixture refresh data changes
-  useEffect(() => {
-    if (fixtureRefreshData) {
-      const now = Date.now()
-      const cooldownSeconds = BASE_AUTO_REFRESH_COOLDOWN * Math.pow(2, fixtureRefreshData.attempts)
-      const timeSinceLastRefresh = (now - fixtureRefreshData.lastRefresh) / 1000
-      const remaining = Math.max(0, Math.ceil(cooldownSeconds - timeSinceLastRefresh))
-      if (remaining > 0) {
-        setCooldownRemaining(remaining)
-      }
-    }
-  }, [fixtureRefreshData])
 
   // Use user preferences for timezone conversion
   const { formatTime, getStatus, getRelative, preferences } = useUserPreferences(user)
@@ -146,7 +98,7 @@ export const FixtureCard = ({ match, user, onVote, onRequestAuth, onAddBroadcast
         )}
       </div>
       <button
-        onClick={handleToggleExpanded}
+        onClick={() => setExpanded(!expanded)}
         style={{
           width: "100%",
           background: "rgba(255,255,255,0.03)",
@@ -164,39 +116,12 @@ export const FixtureCard = ({ match, user, onVote, onRequestAuth, onAddBroadcast
       >
         <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
           <Icon name="wifi" size={11} color="#555" />
-          {match.broadcasts && match.broadcasts.length > 0
-            ? `${expanded ? "Hide " : "See "}${match.broadcasts.length} broadcast${match.broadcasts.length === 1 ? "" : "s"}`
-            : "See Broadcasts"}
+          {expanded ? "Hide Broadcasts" : "See Broadcasts"}
         </span>
         <Icon name={expanded ? "chevUp" : "chevDown"} size={12} />
       </button>
       {expanded && (
         <div style={{ padding: "8px 12px", background: "rgba(0,0,0,0.2)", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
-          {/* Refresh broadcasts button */}
-          <div style={{ marginBottom: 8, display: "flex", justifyContent: "flex-end" }}>
-            <button
-              onClick={handleManualRefresh}
-              disabled={isRefreshing || cooldownRemaining > 0}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 4,
-                background: cooldownRemaining > 0 ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.06)",
-                border: "1px solid rgba(255,255,255,0.1)",
-                borderRadius: 6,
-                padding: "4px 8px",
-                color: (isRefreshing || cooldownRemaining > 0) ? "#555" : "#aaa",
-                fontSize: 10,
-                cursor: (isRefreshing || cooldownRemaining > 0) ? "not-allowed" : "pointer",
-                fontFamily: "monospace"
-              }}
-              title={cooldownRemaining > 0 ? `Wait ${cooldownRemaining}s` : "Refresh broadcasts"}
-            >
-              <Icon name="refresh" size={10} color={(isRefreshing || cooldownRemaining > 0) ? "#555" : "#aaa"} />
-              {isRefreshing ? "..." : cooldownRemaining > 0 ? `${cooldownRemaining}s` : "Refresh"}
-            </button>
-          </div>
-
           {match.broadcasts && match.broadcasts.length > 0 ? (
             <>
               <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }}>

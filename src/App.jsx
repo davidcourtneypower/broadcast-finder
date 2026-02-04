@@ -26,15 +26,7 @@ function App() {
   const [search, setSearch] = useState("")
   const [matches, setMatches] = useState([])
   const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
   const [displayLimit, setDisplayLimit] = useState(20) // Pagination: show 20 fixtures initially
-  const [lastRefreshTime, setLastRefreshTime] = useState(0)
-  const [refreshCooldown, setRefreshCooldown] = useState(0)
-  const [fixtureRefreshAttempts, setFixtureRefreshAttempts] = useState({}) // Track attempts per fixture
-
-  // Rate limiting constants
-  const REFRESH_COOLDOWN_SECONDS = 30
-  const BASE_AUTO_REFRESH_COOLDOWN = 5 // Start at 5 seconds for auto-refresh
 
   const loadMatches = async () => {
     setLoading(true)
@@ -133,132 +125,118 @@ function App() {
     setLoading(false)
   }
   
-  // Cooldown timer effect
+  // Set up real-time subscriptions for broadcasts and votes
   useEffect(() => {
-    if (refreshCooldown > 0) {
-      const timer = setInterval(() => {
-        setRefreshCooldown(prev => Math.max(0, prev - 1))
-      }, 1000)
-      return () => clearInterval(timer)
-    }
-  }, [refreshCooldown])
+    if (!user) return
 
-  const handleRefresh = async (isAutoRefresh = false) => {
-    const now = Date.now()
-    const timeSinceLastRefresh = (now - lastRefreshTime) / 1000
-    const requiredCooldown = REFRESH_COOLDOWN_SECONDS
+    // Subscribe to broadcasts changes
+    const broadcastsChannel = supabase
+      .channel('broadcasts-changes')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'broadcasts' },
+        async (payload) => {
+          console.log('Broadcast change:', payload)
 
-    // Only check global cooldown for manual refresh
-    if (!isAutoRefresh && timeSinceLastRefresh < requiredCooldown) {
-      const remaining = Math.ceil(requiredCooldown - timeSinceLastRefresh)
-      setRefreshCooldown(remaining)
-      return
-    }
+          if (payload.eventType === 'INSERT') {
+            // New broadcast added
+            const newBroadcast = payload.new
 
-    setRefreshing(true)
-    setLastRefreshTime(now)
-    await loadMatches()
-    setRefreshing(false)
-    if (!isAutoRefresh) {
-      setRefreshCooldown(REFRESH_COOLDOWN_SECONDS)
-    }
-  }
+            // Fetch votes for this broadcast
+            const { data: votes } = await supabase
+              .from('votes')
+              .select('*')
+              .eq('broadcast_id', newBroadcast.id)
 
-  const refreshMatchBroadcasts = async (matchId) => {
-    // Refresh only the broadcasts for a specific match (not the whole page)
-    try {
-      // Fetch broadcasts for this match
-      const { data: broadcasts, error: broadcastsError } = await supabase
-        .from("broadcasts")
-        .select("*")
-        .eq("match_id", matchId)
+            // Calculate vote stats
+            const voteStats = { up: 0, down: 0, myVote: null }
+            votes?.forEach(v => {
+              if (v.vote_type === 'up') voteStats.up++
+              else if (v.vote_type === 'down') voteStats.down++
+              if (user && (v.user_id_uuid === user.id || v.user_id === user.id)) {
+                voteStats.myVote = v.vote_type
+              }
+            })
 
-      if (broadcastsError) {
-        console.error("Error loading broadcasts:", broadcastsError)
-        return
-      }
+            // Update matches state
+            setMatches(prev => prev.map(m => {
+              if (m.id !== newBroadcast.match_id) return m
 
-      const broadcastIds = (broadcasts || []).map(b => b.id)
+              // Check if broadcast already exists
+              const exists = m.broadcasts.some(b => b.id === newBroadcast.id)
+              if (exists) return m
 
-      // Fetch votes for these broadcasts
-      let votes = []
-      if (broadcastIds.length > 0) {
-        const { data: votesData, error: votesError } = await supabase
-          .from("votes")
-          .select("*")
-          .in("broadcast_id", broadcastIds)
-
-        if (votesError) {
-          console.error("Error loading votes:", votesError)
-        } else {
-          votes = votesData || []
+              return {
+                ...m,
+                broadcasts: [...m.broadcasts, { ...newBroadcast, voteStats }]
+              }
+            }))
+          } else if (payload.eventType === 'DELETE') {
+            // Broadcast deleted
+            setMatches(prev => prev.map(m => ({
+              ...m,
+              broadcasts: m.broadcasts.filter(b => b.id !== payload.old.id)
+            })))
+          }
         }
-      }
+      )
+      .subscribe()
 
-      // Build vote statistics
-      const votesByBroadcast = {}
-      votes.forEach(v => {
-        if (!votesByBroadcast[v.broadcast_id]) {
-          votesByBroadcast[v.broadcast_id] = { up: 0, down: 0, myVote: null }
+    // Subscribe to votes changes
+    const votesChannel = supabase
+      .channel('votes-changes')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'votes' },
+        (payload) => {
+          console.log('Vote change:', payload)
+
+          setMatches(prev => prev.map(m => ({
+            ...m,
+            broadcasts: m.broadcasts.map(b => {
+              if (b.id !== payload.new?.broadcast_id && b.id !== payload.old?.broadcast_id) return b
+
+              let { up, down, myVote } = b.voteStats
+
+              if (payload.eventType === 'INSERT') {
+                // New vote
+                if (payload.new.vote_type === 'up') up++
+                else if (payload.new.vote_type === 'down') down++
+                if (user && (payload.new.user_id_uuid === user.id || payload.new.user_id === user.id)) {
+                  myVote = payload.new.vote_type
+                }
+              } else if (payload.eventType === 'DELETE') {
+                // Vote removed
+                if (payload.old.vote_type === 'up') up--
+                else if (payload.old.vote_type === 'down') down--
+                if (user && (payload.old.user_id_uuid === user.id || payload.old.user_id === user.id)) {
+                  myVote = null
+                }
+              } else if (payload.eventType === 'UPDATE') {
+                // Vote changed
+                if (payload.old.vote_type === 'up') up--
+                else if (payload.old.vote_type === 'down') down--
+                if (payload.new.vote_type === 'up') up++
+                else if (payload.new.vote_type === 'down') down++
+                if (user && (payload.new.user_id_uuid === user.id || payload.new.user_id === user.id)) {
+                  myVote = payload.new.vote_type
+                }
+              }
+
+              return {
+                ...b,
+                voteStats: { up: Math.max(0, up), down: Math.max(0, down), myVote }
+              }
+            })
+          })))
         }
+      )
+      .subscribe()
 
-        if (v.vote_type === "up") {
-          votesByBroadcast[v.broadcast_id].up++
-        } else if (v.vote_type === "down") {
-          votesByBroadcast[v.broadcast_id].down++
-        }
-
-        if (user && (v.user_id_uuid === user.id || v.user_id === user.id)) {
-          votesByBroadcast[v.broadcast_id].myVote = v.vote_type
-        }
-      })
-
-      // Update only this match's broadcasts in state
-      setMatches(prev => prev.map(m => {
-        if (m.id !== matchId) return m
-
-        const updatedBroadcasts = (broadcasts || []).map(b => ({
-          ...b,
-          voteStats: votesByBroadcast[b.id] || { up: 0, down: 0, myVote: null }
-        }))
-
-        return {
-          ...m,
-          broadcasts: updatedBroadcasts
-        }
-      }))
-    } catch (e) {
-      console.error("Unexpected error refreshing match broadcasts:", e)
+    // Cleanup subscriptions
+    return () => {
+      supabase.removeChannel(broadcastsChannel)
+      supabase.removeChannel(votesChannel)
     }
-  }
-
-  const handleBroadcastsViewed = async (matchId) => {
-    // Auto-refresh when user views broadcasts (per-fixture with exponential backoff)
-    const now = Date.now()
-    const fixtureData = fixtureRefreshAttempts[matchId] || { attempts: 0, lastRefresh: 0 }
-
-    // Calculate cooldown based on number of attempts: 5s, 10s, 20s, 40s (exponential backoff)
-    const cooldownSeconds = BASE_AUTO_REFRESH_COOLDOWN * Math.pow(2, fixtureData.attempts)
-    const timeSinceLastRefresh = (now - fixtureData.lastRefresh) / 1000
-
-    // Check if this specific fixture is still in cooldown
-    if (fixtureData.lastRefresh > 0 && timeSinceLastRefresh < cooldownSeconds) {
-      console.log(`Fixture ${matchId} in cooldown: ${Math.ceil(cooldownSeconds - timeSinceLastRefresh)}s remaining`)
-      return
-    }
-
-    // Update attempts for this fixture
-    setFixtureRefreshAttempts(prev => ({
-      ...prev,
-      [matchId]: {
-        attempts: fixtureData.attempts + 1,
-        lastRefresh: now
-      }
-    }))
-
-    // Refresh only this match's broadcasts (targeted refresh)
-    await refreshMatchBroadcasts(matchId)
-  }
+  }, [user])
   
   const handleAddBroadcast = async (matchId, country, channel) => {
     if (!user) {
@@ -686,8 +664,6 @@ function App() {
                   onVote={handleVote}
                   onRequestAuth={() => setShowAuth(true)}
                   onAddBroadcast={openAddBroadcast}
-                  onBroadcastsViewed={handleBroadcastsViewed}
-                  fixtureRefreshData={fixtureRefreshAttempts[m.id]}
                 />
               ))}
             </div>
