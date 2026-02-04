@@ -12,7 +12,7 @@ export const AddBroadcastModal = ({ onClose, match, onAdd, user }) => {
   const handleAdd = async () => {
     if (!selectedCountry || !selectedChannel) return
     setAdding(true)
-    await onAdd(match.id, selectedCountry, selectedChannel, user)
+    await onAdd(match.id, selectedCountry, selectedChannel)
     setAdding(false)
     onClose()
   }

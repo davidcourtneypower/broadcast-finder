@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { supabase } from './config/supabase'
+import { useAuth } from './hooks/useAuth'
 import { getTodayStr, getTomorrowStr } from './utils/helpers'
 import { DATE_TABS } from './config/constants'
 import { Icon } from './components/Icon'
@@ -8,20 +9,21 @@ import { FilterModal } from './components/FilterModal'
 import { AuthModal } from './components/AuthModal'
 import { AddBroadcastModal } from './components/AddBroadcastModal'
 import { AdminDataModal } from './components/AdminDataModal'
+import { UserSettingsModal } from './components/UserSettingsModal'
 import { getSportConfig } from './config/sports'
 
 function App() {
-  const [user, setUser] = useState(null)
+  const { user, loading: authLoading, signInWithGoogle, signOut } = useAuth()
   const [isAdmin, setIsAdmin] = useState(false)
   const [showAuth, setShowAuth] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
   const [showAddBroadcast, setShowAddBroadcast] = useState(false)
   const [showAdminPanel, setShowAdminPanel] = useState(false)
+  const [showUserSettings, setShowUserSettings] = useState(false)
   const [selectedMatch, setSelectedMatch] = useState(null)
-  const [filters, setFilters] = useState({ sports: [], countries: [], events: [] })
+  const [filters, setFilters] = useState({ sports: [], countries: [], events: [], statuses: [] })
   const [dateTab, setDateTab] = useState("Today")
   const [search, setSearch] = useState("")
-  const [sortBy, setSortBy] = useState("popularity") // popularity, time-asc, time-desc, league, status
   const [matches, setMatches] = useState([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -84,8 +86,8 @@ function App() {
             votesByBroadcast[v.broadcast_id].down++
           }
 
-          // Track current user's vote
-          if (user && v.user_id === user) {
+          // Track current user's vote using user_id_uuid (new) or user_id (legacy)
+          if (user && (v.user_id_uuid === user.id || v.user_id === user.id)) {
             votesByBroadcast[v.broadcast_id].myVote = v.vote_type
           }
         })
@@ -130,12 +132,18 @@ function App() {
     setRefreshing(false)
   }
   
-  const handleAddBroadcast = async (matchId, country, channel, userName) => {
+  const handleAddBroadcast = async (matchId, country, channel) => {
+    if (!user) {
+      console.error('User must be authenticated to add broadcast')
+      return
+    }
+
     const { data, error } = await supabase.from("broadcasts").insert([{
       match_id: matchId,
       country,
       channel,
-      created_by: userName
+      created_by_uuid: user.id,
+      created_by: user.email || 'Anonymous' // Keep legacy field for compatibility
     }]).select()
 
     if (!error && data && data.length > 0) {
@@ -193,12 +201,12 @@ function App() {
 
       const oldVote = currentBroadcast.voteStats.myVote
 
-      // Fetch existing vote from database
+      // Fetch existing vote from database using user_id_uuid
       const { data: existing, error: fetchError } = await supabase
         .from("votes")
         .select("*")
         .eq("broadcast_id", broadcastId)
-        .eq("user_id", user)
+        .eq("user_id_uuid", user.id)
 
       if (fetchError) {
         console.error('Error fetching vote:', fetchError)
@@ -215,7 +223,7 @@ function App() {
             .from("votes")
             .delete()
             .eq("broadcast_id", broadcastId)
-            .eq("user_id", user)
+            .eq("user_id_uuid", user.id)
 
           dbError = error
           newVoteType = null
@@ -225,7 +233,7 @@ function App() {
             .from("votes")
             .update({ vote_type: voteType })
             .eq("broadcast_id", broadcastId)
-            .eq("user_id", user)
+            .eq("user_id_uuid", user.id)
 
           dbError = error
           newVoteType = voteType
@@ -236,7 +244,8 @@ function App() {
           .from("votes")
           .insert([{
             broadcast_id: broadcastId,
-            user_id: user,
+            user_id_uuid: user.id,
+            user_id: user.id, // Keep legacy field for compatibility
             vote_type: voteType
           }])
 
@@ -260,22 +269,47 @@ function App() {
   }
 
   useEffect(() => {
-    loadMatches()
+    // Check if user is admin (you can customize this logic)
+    // For now, checking if email matches a specific domain or value
+    if (user?.email) {
+      // Example: make specific email addresses admins
+      setIsAdmin(user.email === 'davidcourtneypower@gmail.com' || user.user_metadata?.is_admin === true)
+    } else {
+      setIsAdmin(false)
+    }
   }, [user])
 
-  // Reset pagination when filters, search, date, or sort changes
+  useEffect(() => {
+    if (!authLoading) {
+      loadMatches()
+    }
+  }, [user, authLoading])
+
+  // Reset pagination when filters, search, or date changes
   useEffect(() => {
     setDisplayLimit(20)
-  }, [filters, search, dateTab, sortBy])
+  }, [filters, search, dateTab])
 
   const todayStr = getTodayStr()
   const tomorrowStr = getTomorrowStr()
-  const hasActiveFilters = filters.sports?.length > 0 || filters.countries?.length > 0 || filters.events?.length > 0
+  const hasActiveFilters = filters.sports?.length > 0 || filters.countries?.length > 0 || filters.events?.length > 0 || filters.statuses?.length > 0
 
   // Sport-specific status calculation
   const getMatchStatus = (matchDate, matchTime, sport) => {
     try {
-      const matchDateTime = new Date(`${matchDate}T${matchTime}:00`)
+      // Handle time format - could be HH:MM or HH:MM:SS
+      let timeStr = matchTime.trim()
+      if (timeStr.split(':').length === 2) {
+        timeStr = `${timeStr}:00`
+      }
+
+      const matchDateTime = new Date(`${matchDate}T${timeStr}Z`)
+
+      // Check if date is valid
+      if (isNaN(matchDateTime.getTime())) {
+        return "upcoming"
+      }
+
       const now = new Date()
       const diffMinutes = (now - matchDateTime) / (1000 * 60)
 
@@ -301,6 +335,10 @@ function App() {
         if (filters.sports?.length > 0 && !filters.sports.includes(m.sport)) return false
         if (filters.countries?.length > 0 && !filters.countries.includes(m.country)) return false
         if (filters.events?.length > 0 && !filters.events.includes(m.league)) return false
+        if (filters.statuses?.length > 0) {
+          const matchStatus = getMatchStatus(m.match_date, m.match_time, m.sport)
+          if (!filters.statuses.includes(matchStatus)) return false
+        }
       }
       if (search) {
         const q = search.toLowerCase()
@@ -312,44 +350,31 @@ function App() {
       return true
     })
 
-    // Apply sorting
-    switch (sortBy) {
-      case "time-asc":
-        // Earliest first
-        result.sort((a, b) => {
-          const dateCompare = a.match_date.localeCompare(b.match_date)
-          if (dateCompare !== 0) return dateCompare
-          return a.match_time.localeCompare(b.match_time)
-        })
-        break
-      case "time-desc":
-        // Latest first
-        result.sort((a, b) => {
-          const dateCompare = b.match_date.localeCompare(a.match_date)
-          if (dateCompare !== 0) return dateCompare
-          return b.match_time.localeCompare(a.match_time)
-        })
-        break
-      case "league":
-        result.sort((a, b) => a.league.localeCompare(b.league))
-        break
-      case "status":
-        // Live first, then starting soon, then upcoming, then finished
-        const statusOrder = { live: 0, "starting-soon": 1, upcoming: 2, finished: 3 }
-        result.sort((a, b) => {
-          const aStatus = getMatchStatus(a.match_date, a.match_time, a.sport)
-          const bStatus = getMatchStatus(b.match_date, b.match_time, b.sport)
-          return statusOrder[aStatus] - statusOrder[bStatus]
-        })
-        break
-      case "popularity":
-      default:
-        result.sort((a, b) => (b.popularity || 0) - (a.popularity || 0))
-        break
-    }
+    // Always sort by: LIVE → STARTING-SOON → UPCOMING → FINISHED
+    // Within each status, sort by time (most recent live matches first, earliest upcoming matches first)
+    const statusOrder = { live: 0, "starting-soon": 1, upcoming: 2, finished: 3 }
+    result.sort((a, b) => {
+      const aStatus = getMatchStatus(a.match_date, a.match_time, a.sport)
+      const bStatus = getMatchStatus(b.match_date, b.match_time, b.sport)
+
+      // First, sort by status
+      const statusDiff = statusOrder[aStatus] - statusOrder[bStatus]
+      if (statusDiff !== 0) return statusDiff
+
+      // Within same status, sort by time
+      const dateCompare = a.match_date.localeCompare(b.match_date)
+      if (dateCompare !== 0) return dateCompare
+
+      // For live and finished matches, show most recent first (descending - recently started/finished)
+      // For starting-soon and upcoming, show earliest first (ascending - soonest first)
+      if (aStatus === 'live' || aStatus === 'finished') {
+        return b.match_time.localeCompare(a.match_time)
+      }
+      return a.match_time.localeCompare(b.match_time)
+    })
 
     return result
-  }, [matches, dateTab, search, filters, hasActiveFilters, todayStr, tomorrowStr, sortBy])
+  }, [matches, dateTab, search, filters, hasActiveFilters, todayStr, tomorrowStr])
 
   const allSports = useMemo(() =>
     [...new Set(matches.map(m => m.sport))].sort(), [matches]
@@ -362,7 +387,7 @@ function App() {
   )
 
   const activeFilterCount = (filters.sports?.length || 0) +
-    (filters.countries?.length || 0) + (filters.events?.length || 0)
+    (filters.countries?.length || 0) + (filters.events?.length || 0) + (filters.statuses?.length || 0)
 
   // Pagination: get displayed matches
   const displayedMatches = useMemo(() =>
@@ -380,11 +405,19 @@ function App() {
     setSelectedMatch(match)
     setShowAddBroadcast(true)
   }
-  
-  const handleLogin = (name) => {
-    setUser(name)
-    setIsAdmin(name.toLowerCase() === "admin")
-    setShowAuth(false)
+
+  const handleSignOut = async () => {
+    await signOut()
+  }
+
+  const handleSettingsSaved = () => {
+    // Close modal and trigger a re-render to reflect new preferences
+    setShowUserSettings(false)
+    // Force a small delay to ensure preferences are updated in the database
+    setTimeout(() => {
+      // Trigger re-render by updating a dummy state or reloading user preferences
+      window.location.reload()
+    }, 100)
   }
 
   return (
@@ -413,12 +446,42 @@ function App() {
               </button>
             )}
             {user ? (
-              <button onClick={() => { setUser(null); setIsAdmin(false) }} style={{ display: "flex", alignItems: "center", gap: 4, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 7, padding: "4px 8px", color: "#aaa", fontSize: 11, cursor: "pointer", fontFamily: "monospace" }}>
-                <span style={{ width: 20, height: 20, borderRadius: "50%", background: isAdmin ? "linear-gradient(135deg,#ff6b35,#e53935)" : "linear-gradient(135deg,#00e5ff,#7c4dff)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#fff" }}>
-                  {isAdmin ? <Icon name="shield" size={11} color="#fff" /> : user[0].toUpperCase()}
-                </span>
-                <Icon name="logOut" size={12} />
-              </button>
+              <>
+                <button
+                  onClick={() => setShowUserSettings(true)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    background: "rgba(255,255,255,0.06)",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    borderRadius: 7,
+                    padding: "6px 8px",
+                    color: "#aaa",
+                    cursor: "pointer"
+                  }}
+                  title={`Settings (${user.email})`}
+                >
+                  <Icon name="settings" size={14} />
+                </button>
+                <button
+                  onClick={handleSignOut}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    background: "rgba(255,255,255,0.06)",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    borderRadius: 7,
+                    padding: "6px 8px",
+                    color: "#aaa",
+                    cursor: "pointer"
+                  }}
+                  title="Sign out"
+                >
+                  <Icon name="logOut" size={14} />
+                </button>
+              </>
             ) : (
               <button onClick={() => setShowAuth(true)} style={{ display: "flex", alignItems: "center", gap: 4, background: "linear-gradient(135deg,rgba(0,229,255,0.15),rgba(124,77,255,0.15))", border: "1px solid rgba(124,77,255,0.3)", borderRadius: 7, padding: "4px 8px", color: "#aaa", fontSize: 11, cursor: "pointer", fontFamily: "monospace" }}>
                 <Icon name="logIn" size={12} /> Sign In
@@ -438,28 +501,6 @@ function App() {
                 <Icon name="filter" size={14} />
                 {activeFilterCount > 0 && <span style={{ position: "absolute", top: -4, right: -4, background: "#00e5ff", color: "#000", borderRadius: "50%", width: 18, height: 18, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700 }}>{activeFilterCount}</span>}
               </button>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                style={{
-                  padding: "8px 10px",
-                  borderRadius: 8,
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  background: "rgba(255,255,255,0.06)",
-                  color: "#aaa",
-                  fontSize: 12,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  flexShrink: 0,
-                  outline: "none"
-                }}
-              >
-                <option value="popularity" style={{ background: "#1a1a2e", color: "#fff" }}>Popular</option>
-                <option value="time-asc" style={{ background: "#1a1a2e", color: "#fff" }}>Time ↑</option>
-                <option value="time-desc" style={{ background: "#1a1a2e", color: "#fff" }}>Time ↓</option>
-                <option value="status" style={{ background: "#1a1a2e", color: "#fff" }}>Live First</option>
-                <option value="league" style={{ background: "#1a1a2e", color: "#fff" }}>League A-Z</option>
-              </select>
             </div>
 
             <div style={{ display: "flex", gap: 5 }}>
@@ -479,8 +520,29 @@ function App() {
       {/* Content */}
       <div style={{ padding: "10px 12px 24px", flex: "1 0 auto" }}>
         {loading ? (
-          <div style={{ textAlign: "center", padding: 40, color: "#555" }}>
-            <div style={{ fontSize: 13 }}>Loading from Supabase...</div>
+          <div style={{ textAlign: "center", padding: "60px 20px", color: "#555" }}>
+            {/* Loading Spinner */}
+            <div style={{
+              width: 48,
+              height: 48,
+              margin: "0 auto 20px",
+              border: "4px solid rgba(0,229,255,0.1)",
+              borderTop: "4px solid #00e5ff",
+              borderRadius: "50%",
+              animation: "spin 1s linear infinite"
+            }} />
+            <style>{`
+              @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+              }
+            `}</style>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "#00e5ff", marginBottom: 8 }}>
+              Loading Fixtures
+            </div>
+            <div style={{ fontSize: 12, color: "#666" }}>
+              Fetching matches and preparing times...
+            </div>
           </div>
         ) : filtered.length === 0 ? (
           <div style={{ textAlign: "center", padding: 40, color: "#444" }}>
@@ -556,10 +618,11 @@ function App() {
       </div>
       
       {/* Modals */}
-      {showAuth && <AuthModal onClose={() => setShowAuth(false)} onLogin={handleLogin} />}
+      {showAuth && <AuthModal onClose={() => setShowAuth(false)} signInWithGoogle={signInWithGoogle} />}
       {showFilters && <FilterModal onClose={() => setShowFilters(false)} filters={filters} onApply={setFilters} allSports={allSports} matches={matches} />}
       {showAddBroadcast && selectedMatch && <AddBroadcastModal onClose={() => setShowAddBroadcast(false)} match={selectedMatch} onAdd={handleAddBroadcast} user={user} />}
       {showAdminPanel && <AdminDataModal onClose={() => setShowAdminPanel(false)} onUpdate={loadMatches} />}
+      {showUserSettings && <UserSettingsModal onClose={() => setShowUserSettings(false)} onSave={handleSettingsSaved} user={user} />}
     </div>
   )
 }

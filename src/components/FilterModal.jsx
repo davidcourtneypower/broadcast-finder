@@ -6,6 +6,7 @@ export const FilterModal = ({ onClose, filters, onApply, allSports, matches }) =
   const [localSports, setLocalSports] = useState(filters.sports || [])
   const [localCountries, setLocalCountries] = useState(filters.countries || [])
   const [localEvents, setLocalEvents] = useState(filters.events || [])
+  const [localStatuses, setLocalStatuses] = useState(filters.statuses || [])
 
   // Filter countries based on selected sports
   const getFilteredCountries = () => {
@@ -77,19 +78,24 @@ export const FilterModal = ({ onClose, filters, onApply, allSports, matches }) =
   const toggleEvent = (event) => {
     setLocalEvents(prev => prev.includes(event) ? prev.filter(e => e !== event) : [...prev, event])
   }
-  
+
+  const toggleStatus = (status) => {
+    setLocalStatuses(prev => prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status])
+  }
+
   const clearAll = () => {
     setLocalSports([])
     setLocalCountries([])
     setLocalEvents([])
+    setLocalStatuses([])
   }
-  
+
   const apply = () => {
-    onApply({ sports: localSports, countries: localCountries, events: localEvents })
+    onApply({ sports: localSports, countries: localCountries, events: localEvents, statuses: localStatuses })
     onClose()
   }
-  
-  const activeCount = localSports.length + localCountries.length + localEvents.length
+
+  const activeCount = localSports.length + localCountries.length + localEvents.length + localStatuses.length
   
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.72)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }}>
@@ -102,6 +108,43 @@ export const FilterModal = ({ onClose, filters, onApply, allSports, matches }) =
         </div>
         
         <div style={{ flex: 1, overflowY: "auto", marginBottom: 16 }}>
+          {/* Status Filter */}
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 11, color: "#888", textTransform: "uppercase", letterSpacing: 1, fontFamily: "monospace", marginBottom: 8 }}>
+              Status
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {[
+                { value: 'live', label: 'LIVE', color: '#e53935' },
+                { value: 'starting-soon', label: 'STARTING SOON', color: '#ff9800' },
+                { value: 'upcoming', label: 'UPCOMING', color: '#00e5ff' },
+                { value: 'finished', label: 'FINISHED', color: '#666' }
+              ].map(status => {
+                const isSelected = localStatuses.includes(status.value)
+                return (
+                  <button
+                    key={status.value}
+                    onClick={() => toggleStatus(status.value)}
+                    style={{
+                      padding: "6px 12px",
+                      borderRadius: 8,
+                      border: `1px solid ${isSelected ? status.color : "#2a2a4a"}`,
+                      background: isSelected ? `${status.color}22` : "#111122",
+                      color: isSelected ? status.color : "#888",
+                      fontSize: 11,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      textTransform: "uppercase",
+                      letterSpacing: 0.5
+                    }}
+                  >
+                    {status.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
           {allSports.length > 0 && (
             <div style={{ marginBottom: 20 }}>
               <div style={{ fontSize: 11, color: "#888", textTransform: "uppercase", letterSpacing: 1, fontFamily: "monospace", marginBottom: 8 }}>
