@@ -30,10 +30,11 @@ function App() {
   const [displayLimit, setDisplayLimit] = useState(20) // Pagination: show 20 fixtures initially
   const [lastRefreshTime, setLastRefreshTime] = useState(0)
   const [refreshCooldown, setRefreshCooldown] = useState(0)
+  const [fixtureRefreshAttempts, setFixtureRefreshAttempts] = useState({}) // Track attempts per fixture
 
   // Rate limiting constants
   const REFRESH_COOLDOWN_SECONDS = 30
-  const AUTO_REFRESH_COOLDOWN_SECONDS = 10 // Shorter cooldown for auto-refresh
+  const BASE_AUTO_REFRESH_COOLDOWN = 5 // Start at 5 seconds for auto-refresh
 
   const loadMatches = async () => {
     setLoading(true)
@@ -145,10 +146,10 @@ function App() {
   const handleRefresh = async (isAutoRefresh = false) => {
     const now = Date.now()
     const timeSinceLastRefresh = (now - lastRefreshTime) / 1000
-    const requiredCooldown = isAutoRefresh ? AUTO_REFRESH_COOLDOWN_SECONDS : REFRESH_COOLDOWN_SECONDS
+    const requiredCooldown = REFRESH_COOLDOWN_SECONDS
 
-    // Check if we're still in cooldown period
-    if (timeSinceLastRefresh < requiredCooldown) {
+    // Only check global cooldown for manual refresh
+    if (!isAutoRefresh && timeSinceLastRefresh < requiredCooldown) {
       const remaining = Math.ceil(requiredCooldown - timeSinceLastRefresh)
       setRefreshCooldown(remaining)
       return
@@ -158,11 +159,36 @@ function App() {
     setLastRefreshTime(now)
     await loadMatches()
     setRefreshing(false)
-    setRefreshCooldown(isAutoRefresh ? AUTO_REFRESH_COOLDOWN_SECONDS : REFRESH_COOLDOWN_SECONDS)
+    if (!isAutoRefresh) {
+      setRefreshCooldown(REFRESH_COOLDOWN_SECONDS)
+    }
   }
 
-  const handleBroadcastsViewed = async () => {
-    // Auto-refresh when user views broadcasts
+  const handleBroadcastsViewed = async (matchId) => {
+    // Auto-refresh when user views broadcasts (per-fixture with exponential backoff)
+    const now = Date.now()
+    const fixtureData = fixtureRefreshAttempts[matchId] || { attempts: 0, lastRefresh: 0 }
+
+    // Calculate cooldown based on number of attempts: 5s, 10s, 20s, 40s (exponential backoff)
+    const cooldownSeconds = BASE_AUTO_REFRESH_COOLDOWN * Math.pow(2, fixtureData.attempts)
+    const timeSinceLastRefresh = (now - fixtureData.lastRefresh) / 1000
+
+    // Check if this specific fixture is still in cooldown
+    if (fixtureData.lastRefresh > 0 && timeSinceLastRefresh < cooldownSeconds) {
+      console.log(`Fixture ${matchId} in cooldown: ${Math.ceil(cooldownSeconds - timeSinceLastRefresh)}s remaining`)
+      return
+    }
+
+    // Update attempts for this fixture
+    setFixtureRefreshAttempts(prev => ({
+      ...prev,
+      [matchId]: {
+        attempts: fixtureData.attempts + 1,
+        lastRefresh: now
+      }
+    }))
+
+    // Perform refresh
     await handleRefresh(true)
   }
   

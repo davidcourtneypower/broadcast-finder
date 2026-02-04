@@ -17,7 +17,7 @@ export const FixtureCard = ({ match, user, onVote, onRequestAuth, onAddBroadcast
 
     // If expanding, trigger auto-refresh to get latest broadcast data
     if (newExpandedState && onBroadcastsViewed) {
-      onBroadcastsViewed()
+      onBroadcastsViewed(match.id)
     }
   }
 
