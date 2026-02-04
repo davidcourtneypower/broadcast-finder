@@ -563,27 +563,6 @@ function App() {
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <button
-              onClick={() => handleRefresh(false)}
-              disabled={refreshing || refreshCooldown > 0}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 4,
-                background: refreshCooldown > 0 ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.06)",
-                border: "1px solid rgba(255,255,255,0.1)",
-                borderRadius: 7,
-                padding: "4px 8px",
-                color: (refreshing || refreshCooldown > 0) ? "#555" : "#aaa",
-                fontSize: 10,
-                cursor: (refreshing || refreshCooldown > 0) ? "not-allowed" : "pointer",
-                fontFamily: "monospace"
-              }}
-              title={refreshCooldown > 0 ? `Wait ${refreshCooldown}s` : "Refresh broadcasts"}
-            >
-              <Icon name="refresh" size={11} color={(refreshing || refreshCooldown > 0) ? "#555" : "#aaa"} />
-              {refreshing ? "..." : refreshCooldown > 0 ? `${refreshCooldown}s` : "Refresh"}
-            </button>
             {isAdmin && (
               <button onClick={() => setShowAdminPanel(true)} style={{ display: "flex", alignItems: "center", gap: 4, background: "rgba(0,229,255,0.15)", border: "1px solid rgba(0,229,255,0.3)", borderRadius: 7, padding: "4px 8px", color: "#00e5ff", fontSize: 10, cursor: "pointer", fontFamily: "monospace" }}>
                 <Icon name="settings" size={11} /> Admin
@@ -708,6 +687,7 @@ function App() {
                   onRequestAuth={() => setShowAuth(true)}
                   onAddBroadcast={openAddBroadcast}
                   onBroadcastsViewed={handleBroadcastsViewed}
+                  fixtureRefreshData={fixtureRefreshAttempts[m.id]}
                 />
               ))}
             </div>
