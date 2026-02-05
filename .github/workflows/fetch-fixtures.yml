@@ -2,13 +2,11 @@ name: API Sports Integration
 
 on:
   schedule:
-    - cron: '0 6,18 * * *'  # Fetch: 6 AM and 6 PM UTC (Football & Basketball)
-    - cron: '0 2 * * *'     # Cleanup: 2 AM UTC daily
+    - cron: '0 */6 * * *'   # Fetch & Cleanup: Every 6 hours (12 AM, 6 AM, 12 PM, 6 PM UTC)
   workflow_dispatch:          # Allow manual trigger
 
 jobs:
   fetch-fixtures:
-    if: github.event.schedule == '0 6,18 * * *' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Fetch Football Fixtures from API-Sports.io
@@ -26,7 +24,6 @@ jobs:
             -d '{"sport":"basketball","dates":["today","tomorrow"],"trigger":"scheduled"}'
 
   cleanup-old-data:
-    if: github.event.schedule == '0 2 * * *' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Cleanup Old Fixtures
