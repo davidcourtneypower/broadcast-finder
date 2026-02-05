@@ -11,7 +11,6 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
   const [importing, setImporting] = useState(false)
   const [fetching, setFetching] = useState(false)
   const [selectedDates, setSelectedDates] = useState(['today', 'tomorrow'])
-  const [selectedSport, setSelectedSport] = useState('football')
   const [logs, setLogs] = useState([])
   const [loadingLogs, setLoadingLogs] = useState(false)
   const [fetchResult, setFetchResult] = useState(null)
@@ -102,14 +101,13 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
 
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 
-      const response = await fetch(`${supabaseUrl}/functions/v1/fetch-fixtures`, {
+      const response = await fetch(`${supabaseUrl}/functions/v1/fetch-all-sports`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          sport: selectedSport,
           dates: selectedDates,
           trigger: 'manual'
         })
@@ -119,7 +117,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
 
       if (result.success || result.status === 'partial') {
         setFetchResult(result)
-        setSuccess(`Successfully fetched ${result.fetched} fixtures and updated ${result.updated} matches!`)
+        setSuccess(`Successfully fetched ${result.eventsFound} events across ${result.sportsFound} sports!`)
         setTimeout(() => { onUpdate() }, 1000)
       } else {
         setError("Fetch failed: " + (result.error || 'Unknown error'))
@@ -618,36 +616,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
           {activeTab === 'fetch' && (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               <div style={{ fontSize: 11, color: "#888", lineHeight: 1.5 }}>
-                Manually fetch fixtures from API-Sports.io. This will retrieve all fixtures for the selected sport and dates with a 15-second timeout.
-              </div>
-
-              <div>
-                <div style={{ fontSize: 12, color: "#aaa", marginBottom: 8, fontWeight: 600 }}>Select Sport</div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  {['football', 'basketball'].map(sport => {
-                    const selected = selectedSport === sport
-                    return (
-                      <button
-                        key={sport}
-                        onClick={() => setSelectedSport(sport)}
-                        style={{
-                          flex: 1,
-                          padding: "10px 16px",
-                          borderRadius: 8,
-                          border: selected ? "1px solid rgba(0,229,255,0.5)" : "1px solid #2a2a4a",
-                          background: selected ? "rgba(0,229,255,0.15)" : "rgba(255,255,255,0.04)",
-                          color: selected ? "#00e5ff" : "#666",
-                          fontSize: 13,
-                          fontWeight: 600,
-                          cursor: "pointer",
-                          textTransform: "capitalize"
-                        }}
-                      >
-                        {sport}
-                      </button>
-                    )
-                  })}
-                </div>
+                Manually fetch all sports fixtures and TV broadcasts from TheSportsDB. This will retrieve events for all sports on the selected dates.
               </div>
 
               <div>
@@ -705,8 +674,19 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
                     Fetch {fetchResult.status === 'success' ? 'Successful' : fetchResult.status === 'partial' ? 'Partially Successful' : 'Failed'}
                   </div>
                   <div style={{ fontSize: 11, color: "#aaa", lineHeight: 1.6 }}>
-                    • Fetched: {fetchResult.fetched} fixtures<br />
-                    • Updated: {fetchResult.updated} matches<br />
+                    • Found: {fetchResult.eventsFound} events<br />
+                    • Inserted: {fetchResult.eventsInserted} matches<br />
+                    • Sports: {fetchResult.sportsFound}<br />
+                    {fetchResult.sportStats && Object.keys(fetchResult.sportStats).length > 0 && (
+                      <div style={{ marginTop: 6, fontSize: 10 }}>
+                        {Object.entries(fetchResult.sportStats).slice(0, 5).map(([sport, stats]) => (
+                          <div key={sport}>• {sport}: {stats.eventsFound} events</div>
+                        ))}
+                        {Object.keys(fetchResult.sportStats).length > 5 && (
+                          <div>• ...and {Object.keys(fetchResult.sportStats).length - 5} more sports</div>
+                        )}
+                      </div>
+                    )}
                     {fetchResult.errors && (
                       <>
                         • Errors: {fetchResult.errors.length}<br />
@@ -739,7 +719,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
                     cursor: selectedDates.length > 0 && !fetching ? "pointer" : "not-allowed"
                   }}
                 >
-                  {fetching ? "Fetching..." : "Fetch from API-Sports.io"}
+                  {fetching ? "Fetching..." : "Fetch All Sports from TheSportsDB"}
                 </button>
               </div>
             </div>
@@ -804,7 +784,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
                   <input
                     value={searchBroadcast}
                     onChange={(e) => setSearchBroadcast(e.target.value)}
-                    placeholder="Search by username, fixture, league, channel, or country..."
+                    placeholder="Search user email, teams, leagues..."
                     style={{
                       width: "100%",
                       padding: "6px 10px 6px 30px",

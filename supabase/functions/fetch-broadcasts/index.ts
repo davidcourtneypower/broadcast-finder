@@ -1,21 +1,112 @@
 /**
- * Fetch Broadcasts Edge Function
- * Fetches TV broadcast data from TheSportsDB and matches it to existing fixtures
+ * Fetch Broadcasts Edge Function (V2 - Simplified)
+ * Fetches TV broadcast data from TheSportsDB and links directly by event ID
+ * No fuzzy matching needed - both fixtures and broadcasts come from TheSportsDB
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { TheSportsDBClient } from './_shared/thesportsdb-client.ts';
-import { EventMatcher, DatabaseMatch } from './_shared/event-matcher.ts';
-import { getSportsDBConfig, getSupportedSports } from './_shared/thesportsdb-config.ts';
-import { transformTheSportsDBTVToBroadcasts, deduplicateBroadcasts, BroadcastInsert } from './_shared/transformers.ts';
+import { TheSportsDBv2Client } from '../fetch-all-sports/_shared/thesportsdb-v2-client.ts';
 
-interface SportResult {
-  eventsProcessed: number;
-  matched: number;
-  unmatched: number;
-  broadcastsInserted: number;
-  errors?: string[];
+interface BroadcastInsert {
+  match_id: string;
+  country: string;
+  channel: string;
+  created_by: string;
+  source: string;
+  source_id: string;
+  confidence_score: number;
+}
+
+/** Map common country codes/names to standardized names */
+const COUNTRY_NORMALIZATIONS: Record<string, string> = {
+  'us': 'USA',
+  'usa': 'USA',
+  'united states': 'USA',
+  'united states of america': 'USA',
+  'uk': 'UK',
+  'gb': 'UK',
+  'united kingdom': 'UK',
+  'great britain': 'UK',
+  'england': 'UK',
+  'ca': 'Canada',
+  'can': 'Canada',
+  'de': 'Germany',
+  'ger': 'Germany',
+  'deutschland': 'Germany',
+  'fr': 'France',
+  'fra': 'France',
+  'es': 'Spain',
+  'esp': 'Spain',
+  'españa': 'Spain',
+  'it': 'Italy',
+  'ita': 'Italy',
+  'italia': 'Italy',
+  'au': 'Australia',
+  'aus': 'Australia',
+  'in': 'India',
+  'ind': 'India',
+  'cn': 'China',
+  'chn': 'China',
+  'jp': 'Japan',
+  'jpn': 'Japan',
+  'br': 'Brazil',
+  'bra': 'Brazil',
+  'brasil': 'Brazil',
+  'mx': 'Mexico',
+  'mex': 'Mexico',
+  'méxico': 'Mexico',
+  'ar': 'Argentina',
+  'arg': 'Argentina',
+  'tr': 'Turkey',
+  'tur': 'Turkey',
+  'türkiye': 'Turkey',
+  'ru': 'Russia',
+  'rus': 'Russia',
+  'worldwide': 'Global',
+  'international': 'Global',
+  'world': 'Global',
+};
+
+function normalizeCountry(country: string): string {
+  if (!country) return 'Global';
+  const normalized = country.toLowerCase().trim();
+  return COUNTRY_NORMALIZATIONS[normalized] || country;
+}
+
+/**
+ * Parse TV stations string which may contain multiple channels
+ * Format can be: "ESPN, Fox Sports" or "ESPN (USA), Sky Sports (UK)"
+ */
+function parseTVStations(
+  tvStation: string | null,
+  defaultCountry: string
+): Array<{ channel: string; country: string }> {
+  if (!tvStation) return [];
+
+  const results: Array<{ channel: string; country: string }> = [];
+  const stations = tvStation.split(',').map(s => s.trim()).filter(Boolean);
+
+  for (const station of stations) {
+    // Check if station has country in parentheses: "ESPN (USA)"
+    const match = station.match(/^(.+?)\s*\(([^)]+)\)$/);
+
+    if (match) {
+      const channel = match[1].trim();
+      const country = normalizeCountry(match[2].trim());
+      if (channel) {
+        results.push({ channel, country });
+      }
+    } else {
+      // No country specified, use default
+      const channel = station.trim();
+      if (channel) {
+        results.push({ channel, country: normalizeCountry(defaultCountry) });
+      }
+    }
+  }
+
+  return results;
 }
 
 serve(async (req) => {
@@ -24,7 +115,6 @@ serve(async (req) => {
   try {
     const body = await req.json();
     const {
-      sports = getSupportedSports(),
       dates = ['today', 'tomorrow'],
       trigger = 'manual'
     } = body;
@@ -35,11 +125,8 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
 
-    // Initialize TheSportsDB client
-    // Use '1' as free tier key, or custom key from env
-    const apiKey = Deno.env.get('THESPORTSDB_API_KEY') || '1';
-    const isPremium = apiKey !== '1';
-    const client = new TheSportsDBClient(apiKey, isPremium);
+    // Initialize TheSportsDB V2 client
+    const client = new TheSportsDBv2Client();
 
     // Build date strings
     const today = new Date();
@@ -55,111 +142,79 @@ serve(async (req) => {
       .map((d: string) => dateMap[d] || d)
       .filter(Boolean);
 
-    // Track overall statistics
-    let totalEventsProcessed = 0;
-    let totalBroadcastsInserted = 0;
+    console.log(`Starting broadcast fetch for dates: ${datesToFetch.join(', ')}, trigger: ${trigger}`);
+
+    // Track statistics
+    let totalTVEventsFound = 0;
     let totalMatched = 0;
     let totalUnmatched = 0;
+    let totalBroadcastsInserted = 0;
     const errors: string[] = [];
-    const sportResults: Record<string, SportResult | { error: string }> = {};
 
-    console.log(`Starting broadcast fetch for sports: ${sports.join(', ')}, dates: ${datesToFetch.join(', ')}`);
-
-    // Process each sport
-    for (const sport of sports) {
-      const sportConfig = getSportsDBConfig(sport);
-
-      if (!sportConfig) {
-        const errorMsg = `Unknown sport: ${sport}`;
-        errors.push(errorMsg);
-        sportResults[sport] = { error: errorMsg };
-        continue;
-      }
-
-      const sportStartTime = Date.now();
-      let sportEventsProcessed = 0;
-      let sportBroadcastsInserted = 0;
-      let sportMatched = 0;
-      let sportUnmatched = 0;
-      const sportErrors: string[] = [];
-
+    // Fetch TV broadcasts for each date
+    for (const date of datesToFetch) {
       try {
-        // Collect all broadcasts for this sport across dates
+        console.log(`Fetching TV broadcasts for ${date}...`);
+        const tvEvents = await client.fetchTVForDay(date);
+
+        if (!tvEvents || tvEvents.length === 0) {
+          console.log(`No TV events found for ${date}`);
+          continue;
+        }
+
+        console.log(`Found ${tvEvents.length} TV events for ${date}`);
+        totalTVEventsFound += tvEvents.length;
+
+        // Collect all broadcasts for batch insert
         const allBroadcasts: BroadcastInsert[] = [];
 
-        for (const date of datesToFetch) {
-          console.log(`Fetching ${sport} TV data for ${date}...`);
+        // Process each TV event
+        for (const tvEvent of tvEvents) {
+          if (!tvEvent.idEvent) {
+            totalUnmatched++;
+            continue;
+          }
 
-          try {
-            // Fetch TV schedule from TheSportsDB
-            const tvResponse = await client.fetchTVSchedule({
-              date,
-              sport: sportConfig.sportsdbSport
+          // Direct lookup by TheSportsDB event ID
+          const { data: match, error: matchError } = await supabase
+            .from('matches')
+            .select('id')
+            .eq('sportsdb_event_id', tvEvent.idEvent)
+            .single();
+
+          if (matchError || !match) {
+            totalUnmatched++;
+            console.log(`No match found for event ${tvEvent.idEvent}: ${tvEvent.strEvent}`);
+            continue;
+          }
+
+          totalMatched++;
+
+          // Parse TV stations
+          const stations = parseTVStations(tvEvent.strTVStation, tvEvent.strCountry || 'Global');
+
+          for (const { channel, country } of stations) {
+            allBroadcasts.push({
+              match_id: match.id,
+              country,
+              channel,
+              created_by: 'system',
+              source: 'thesportsdb',
+              source_id: tvEvent.idEvent,
+              confidence_score: 100 // Direct ID match = highest confidence
             });
-
-            const tvEvents = tvResponse.tvevents || [];
-            sportEventsProcessed += tvEvents.length;
-
-            console.log(`Found ${tvEvents.length} TV events for ${sport} on ${date}`);
-
-            if (tvEvents.length === 0) {
-              continue;
-            }
-
-            // Fetch existing matches for this date and sport from database
-            const { data: dbMatches, error: dbError } = await supabase
-              .from('matches')
-              .select('id, sport, league, home, away, match_date, match_time')
-              .eq('match_date', date)
-              .ilike('sport', sportConfig.internalSport);
-
-            if (dbError) {
-              sportErrors.push(`DB error fetching matches for ${date}: ${dbError.message}`);
-              continue;
-            }
-
-            if (!dbMatches || dbMatches.length === 0) {
-              console.log(`No database matches found for ${sport} on ${date}`);
-              sportUnmatched += tvEvents.length;
-              continue;
-            }
-
-            console.log(`Found ${dbMatches.length} database matches for ${sport} on ${date}`);
-
-            // Match each TV event to a database fixture
-            for (const tvEvent of tvEvents) {
-              const bestMatch = EventMatcher.findBestMatch(
-                tvEvent,
-                dbMatches as DatabaseMatch[],
-                sportConfig
-              );
-
-              if (bestMatch) {
-                sportMatched++;
-                const broadcasts = transformTheSportsDBTVToBroadcasts(
-                  tvEvent,
-                  bestMatch.match.id,
-                  bestMatch.score
-                );
-                allBroadcasts.push(...broadcasts);
-
-                console.log(`Matched: ${tvEvent.strHomeTeam} vs ${tvEvent.strAwayTeam} -> ${bestMatch.match.id} (score: ${bestMatch.score})`);
-              } else {
-                sportUnmatched++;
-                console.log(`No match found for: ${tvEvent.strHomeTeam} vs ${tvEvent.strAwayTeam} (${tvEvent.strLeague})`);
-              }
-            }
-
-          } catch (dateError) {
-            const errorMsg = `Error processing ${sport} for ${date}: ${(dateError as Error).message}`;
-            console.error(errorMsg);
-            sportErrors.push(errorMsg);
           }
         }
 
-        // Deduplicate broadcasts before insertion
-        const uniqueBroadcasts = deduplicateBroadcasts(allBroadcasts);
-        console.log(`Inserting ${uniqueBroadcasts.length} unique broadcasts for ${sport} (${allBroadcasts.length} total before dedup)`);
+        // Deduplicate broadcasts
+        const seen = new Map<string, BroadcastInsert>();
+        for (const broadcast of allBroadcasts) {
+          const key = `${broadcast.match_id}|${broadcast.channel.toLowerCase()}|${broadcast.country.toLowerCase()}`;
+          seen.set(key, broadcast);
+        }
+        const uniqueBroadcasts = Array.from(seen.values());
+
+        console.log(`Inserting ${uniqueBroadcasts.length} unique broadcasts for ${date}`);
 
         // Batch insert broadcasts
         if (uniqueBroadcasts.length > 0) {
@@ -168,8 +223,6 @@ serve(async (req) => {
           for (let i = 0; i < uniqueBroadcasts.length; i += batchSize) {
             const batch = uniqueBroadcasts.slice(i, i + batchSize);
 
-            // Use upsert with conflict handling
-            // If a broadcast with same match_id, channel, country, source exists, update it
             const { error: insertError } = await supabase
               .from('broadcasts')
               .upsert(batch, {
@@ -178,7 +231,7 @@ serve(async (req) => {
               });
 
             if (insertError) {
-              // If upsert fails (e.g., constraint doesn't exist yet), try insert with ignore
+              // If upsert fails, try simple insert
               console.warn(`Upsert failed, trying insert: ${insertError.message}`);
 
               const { error: insertError2 } = await supabase
@@ -186,84 +239,52 @@ serve(async (req) => {
                 .insert(batch);
 
               if (insertError2) {
-                // Log but continue - some may be duplicates
-                console.warn(`Insert batch ${i}-${i + batch.length} partial: ${insertError2.message}`);
+                console.warn(`Insert batch failed: ${insertError2.message}`);
+              } else {
+                totalBroadcastsInserted += batch.length;
               }
+            } else {
+              totalBroadcastsInserted += batch.length;
             }
-
-            sportBroadcastsInserted += batch.length;
           }
         }
 
-        // Record sport results
-        sportResults[sport] = {
-          eventsProcessed: sportEventsProcessed,
-          matched: sportMatched,
-          unmatched: sportUnmatched,
-          broadcastsInserted: sportBroadcastsInserted,
-          errors: sportErrors.length > 0 ? sportErrors : undefined
-        };
-
-        // Update totals
-        totalEventsProcessed += sportEventsProcessed;
-        totalMatched += sportMatched;
-        totalUnmatched += sportUnmatched;
-        totalBroadcastsInserted += sportBroadcastsInserted;
-        errors.push(...sportErrors);
-
-        // Log to api_fetch_logs
-        const { error: logError } = await supabase.from('api_fetch_logs').insert({
-          fetch_type: `broadcast-${trigger}`,
-          sport: sport,
-          fetch_date: today.toISOString().split('T')[0],
-          status: sportErrors.length > 0 ? (sportBroadcastsInserted > 0 ? 'partial' : 'error') : 'success',
-          matches_fetched: sportEventsProcessed,
-          matches_created: sportBroadcastsInserted,
-          matches_updated: sportMatched,
-          error_message: sportErrors.length > 0 ? sportErrors.join('; ') : null,
-          api_response_time_ms: Date.now() - sportStartTime
-        });
-
-        if (logError) {
-          console.error(`Failed to log ${sport} fetch:`, logError);
-        }
-
-      } catch (sportError) {
-        const errorMsg = `Fatal error processing ${sport}: ${(sportError as Error).message}`;
+      } catch (dateError) {
+        const errorMsg = `Error processing ${date}: ${(dateError as Error).message}`;
         console.error(errorMsg);
-        sportErrors.push(errorMsg);
         errors.push(errorMsg);
-        sportResults[sport] = { error: errorMsg };
-
-        // Log error
-        await supabase.from('api_fetch_logs').insert({
-          fetch_type: `broadcast-${trigger}`,
-          sport: sport,
-          fetch_date: today.toISOString().split('T')[0],
-          status: 'error',
-          matches_fetched: 0,
-          matches_created: 0,
-          matches_updated: 0,
-          error_message: errorMsg,
-          api_response_time_ms: Date.now() - sportStartTime
-        });
       }
     }
 
-    // Determine overall status
+    // Log to api_fetch_logs
     const status = errors.length > 0
       ? (totalBroadcastsInserted > 0 ? 'partial' : 'error')
       : 'success';
 
+    const { error: logError } = await supabase.from('api_fetch_logs').insert({
+      fetch_type: `broadcast-${trigger}`,
+      sport: 'all',
+      fetch_date: today.toISOString().split('T')[0],
+      status,
+      matches_fetched: totalTVEventsFound,
+      matches_created: totalBroadcastsInserted,
+      matches_updated: totalMatched,
+      error_message: errors.length > 0 ? errors.join('; ') : null,
+      api_response_time_ms: Date.now() - startTime
+    });
+
+    if (logError) {
+      console.error('Failed to log fetch:', logError);
+    }
+
     const response = {
       success: status !== 'error',
       status,
-      eventsProcessed: totalEventsProcessed,
+      tvEventsFound: totalTVEventsFound,
       matched: totalMatched,
       unmatched: totalUnmatched,
       broadcastsInserted: totalBroadcastsInserted,
       executionTimeMs: Date.now() - startTime,
-      sports: sportResults,
       errors: errors.length > 0 ? errors : undefined
     };
 
@@ -286,7 +307,7 @@ serve(async (req) => {
 
       await supabase.from('api_fetch_logs').insert({
         fetch_type: 'broadcast-manual',
-        sport: 'unknown',
+        sport: 'all',
         fetch_date: new Date().toISOString().split('T')[0],
         status: 'error',
         matches_fetched: 0,

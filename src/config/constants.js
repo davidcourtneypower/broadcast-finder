@@ -1,16 +1,30 @@
-import { SPORTS_CONFIG } from './sports'
+import { getSportColors } from './sports'
 
-// Build SPORT_COLORS from sports config
-export const SPORT_COLORS = Object.fromEntries(
-  Object.entries(SPORTS_CONFIG).map(([name, config]) => [
-    name,
-    {
-      ...config.colors,
-      glow: config.colors.accent.replace(')', ', 0.25)').replace('rgb', 'rgba')
+/**
+ * Dynamic sport colors - generates colors for any sport
+ * @param {string} sportName - Sport name
+ * @returns {object} Color scheme with accent, bg, and glow properties
+ */
+export const getSportColorScheme = (sportName) => {
+  const colors = getSportColors(sportName)
+  return {
+    ...colors,
+    glow: colors.accent.replace(')', ', 0.25)').replace('rgb', 'rgba')
+  }
+}
+
+// Legacy export - kept for backwards compatibility but now uses dynamic colors
+export const SPORT_COLORS = new Proxy({}, {
+  get: (target, prop) => {
+    if (typeof prop === 'string') {
+      return getSportColorScheme(prop)
     }
-  ])
-)
+    return undefined
+  }
+})
 
+// Channels by country - used for user-submitted broadcasts
+// Users can still add broadcasts from these channels
 export const CHANNELS_BY_COUNTRY = {
   "USA": ["ESPN", "ESPN+", "FOX", "CBS", "NBC", "ABC", "TNT", "NBA TV", "Peacock", "Paramount+", "Hulu Live", "fuboTV", "Bally Sports"],
   "UK": ["Sky Sports", "BT Sport", "BBC", "ITV", "Amazon Prime Video UK", "DAZN UK", "TNT Sports"],
