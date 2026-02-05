@@ -39,6 +39,63 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
   const [banAction, setBanAction] = useState("ban") // "ban" or "unban"
   const [searchUser, setSearchUser] = useState("")
   const [logTypeFilter, setLogTypeFilter] = useState("all")
+  const [importType, setImportType] = useState(null) // 'fixtures', 'broadcasts', 'legacy', or null
+  const [importPreview, setImportPreview] = useState(null)
+
+  // Detect and preview import data
+  const detectImportType = (jsonString) => {
+    try {
+      const parsed = JSON.parse(jsonString)
+
+      // TheSportsDB fixtures format
+      if (parsed.events && Array.isArray(parsed.events)) {
+        setImportType('fixtures')
+        setImportPreview({
+          count: parsed.events.length,
+          sample: parsed.events.slice(0, 3).map(e => ({
+            event: e.strEvent,
+            sport: e.strSport,
+            date: e.dateEvent
+          }))
+        })
+        return
+      }
+
+      // TheSportsDB TV broadcasts format
+      if (parsed.tvevents && Array.isArray(parsed.tvevents)) {
+        setImportType('broadcasts')
+        setImportPreview({
+          count: parsed.tvevents.length,
+          sample: parsed.tvevents.slice(0, 3).map(e => ({
+            event: e.strEvent,
+            channel: e.strTVStation || e.strChannel,
+            country: e.strCountry
+          }))
+        })
+        return
+      }
+
+      // Legacy array format
+      if (Array.isArray(parsed)) {
+        setImportType('legacy')
+        setImportPreview({
+          count: parsed.length,
+          sample: parsed.slice(0, 3).map(m => ({
+            teams: `${m.home} vs ${m.away}`,
+            sport: m.sport,
+            date: m.date
+          }))
+        })
+        return
+      }
+
+      setImportType(null)
+      setImportPreview(null)
+    } catch {
+      setImportType(null)
+      setImportPreview(null)
+    }
+  }
 
   // Helper function to log admin actions
   const logAdminAction = async (actionType, details) => {
@@ -66,32 +123,133 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
     setImporting(true)
     setError("")
     setSuccess("")
+
     try {
       const parsed = JSON.parse(jsonData)
-      if (!Array.isArray(parsed)) {
-        setError("Expected an array of matches")
+
+      // TheSportsDB fixtures format
+      if (parsed.events && Array.isArray(parsed.events)) {
+        const events = parsed.events
+        const matches = events.map(e => ({
+          id: `sportsdb-${e.idEvent}`,
+          sportsdb_event_id: e.idEvent,
+          sport: e.strSport || 'Unknown',
+          league: e.strLeague || 'Unknown League',
+          home: e.strHomeTeam || 'TBD',
+          away: e.strAwayTeam || 'TBD',
+          match_date: e.dateEvent,
+          match_time: e.strTime?.substring(0, 5) || '00:00',
+          country: e.strCountry || 'Global',
+          status: 'upcoming',
+          popularity: 70
+        }))
+
+        const { error: dbError } = await supabase
+          .from("matches")
+          .upsert(matches, { onConflict: 'sportsdb_event_id' })
+
+        if (dbError) {
+          setError("Database error: " + dbError.message)
+        } else {
+          const sports = [...new Set(matches.map(m => m.sport))]
+          setSuccess(`Imported ${matches.length} fixtures across ${sports.length} sport(s)!`)
+          await logAdminAction('fixtures_imported', {
+            extraData: { count: matches.length, sports, source: 'thesportsdb_json' }
+          })
+          setTimeout(() => { onUpdate() }, 1500)
+        }
         setImporting(false)
         return
       }
-      const matches = parsed.map(m => ({
-        id: m.id,
-        sport: m.sport,
-        league: m.league,
-        home: m.home,
-        away: m.away,
-        match_date: m.date,
-        match_time: m.time,
-        country: m.country,
-        status: m.status || "upcoming",
-        popularity: m.popularity || 70
-      }))
-      const { error: dbError } = await supabase.from("matches").upsert(matches)
-      if (dbError) {
-        setError("Database error: " + dbError.message)
-      } else {
-        setSuccess(`Successfully imported ${matches.length} matches!`)
-        setTimeout(() => { onUpdate(); onClose() }, 1500)
+
+      // TheSportsDB TV broadcasts format
+      if (parsed.tvevents && Array.isArray(parsed.tvevents)) {
+        const tvevents = parsed.tvevents
+        let matched = 0
+        let unmatched = 0
+        let inserted = 0
+
+        for (const tv of tvevents) {
+          if (!tv.idEvent) {
+            unmatched++
+            continue
+          }
+
+          // Find the match by sportsdb_event_id
+          const { data: match } = await supabase
+            .from('matches')
+            .select('id')
+            .eq('sportsdb_event_id', tv.idEvent)
+            .single()
+
+          if (!match) {
+            unmatched++
+            continue
+          }
+
+          matched++
+
+          // Parse TV stations (may be comma-separated)
+          const stations = (tv.strTVStation || tv.strChannel || '').split(',').map(s => s.trim()).filter(Boolean)
+          const country = tv.strCountry || 'Global'
+
+          for (const channel of stations) {
+            const { error: insertError } = await supabase
+              .from('broadcasts')
+              .upsert({
+                match_id: match.id,
+                channel,
+                country,
+                source: 'thesportsdb',
+                source_id: tv.idEvent,
+                confidence_score: 100,
+                created_by: 'system'
+              }, { onConflict: 'match_id,channel,country,source' })
+
+            if (!insertError) inserted++
+          }
+        }
+
+        if (matched === 0 && unmatched > 0) {
+          setError(`No matching fixtures found for ${unmatched} TV events. Import fixtures first.`)
+        } else {
+          setSuccess(`Linked ${inserted} broadcasts to ${matched} fixtures (${unmatched} unmatched)`)
+          await logAdminAction('broadcasts_imported', {
+            extraData: { matched, unmatched, inserted, source: 'thesportsdb_json' }
+          })
+          setTimeout(() => { onUpdate() }, 1500)
+        }
+        setImporting(false)
+        return
       }
+
+      // Legacy array format
+      if (Array.isArray(parsed)) {
+        const matches = parsed.map(m => ({
+          id: m.id,
+          sport: m.sport,
+          league: m.league,
+          home: m.home,
+          away: m.away,
+          match_date: m.date,
+          match_time: m.time,
+          country: m.country,
+          status: m.status || "upcoming",
+          popularity: m.popularity || 70
+        }))
+
+        const { error: dbError } = await supabase.from("matches").upsert(matches)
+        if (dbError) {
+          setError("Database error: " + dbError.message)
+        } else {
+          setSuccess(`Successfully imported ${matches.length} matches!`)
+          setTimeout(() => { onUpdate() }, 1500)
+        }
+        setImporting(false)
+        return
+      }
+
+      setError("Unrecognized format. Expected TheSportsDB events/tvevents or array of matches.")
     } catch (e) {
       setError("Error: " + e.message)
     }
@@ -721,12 +879,25 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
           {activeTab === 'import' && (
             <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
               <div style={{ fontSize: 11, color: "#888", marginBottom: 12, lineHeight: 1.5 }}>
-                Paste the parsed matches JSON array. This will sync to Supabase.
+                Paste JSON from TheSportsDB API responses. Supports:<br />
+                • <span style={{ color: "#00e5ff" }}>{"{ events: [...] }"}</span> - Fixtures from eventsday.php<br />
+                • <span style={{ color: "#ff9f1c" }}>{"{ tvevents: [...] }"}</span> - Broadcasts from eventstv.php
               </div>
               <textarea
                 value={jsonData}
-                onChange={(e) => { setJsonData(e.target.value); setError(""); setSuccess("") }}
-                placeholder='[{"id":"123","sport":"Football","league":"Premier League","home":"Team A","away":"Team B","date":"2026-02-04","time":"20:00","country":"UK","status":"upcoming","popularity":85}]'
+                onChange={(e) => {
+                  setJsonData(e.target.value)
+                  setError("")
+                  setSuccess("")
+                  detectImportType(e.target.value)
+                }}
+                placeholder='Paste TheSportsDB JSON response here...
+
+Example fixtures:
+{ "events": [{ "idEvent": "123", "strSport": "Soccer", ... }] }
+
+Example broadcasts:
+{ "tvevents": [{ "idEvent": "123", "strTVStation": "ESPN", ... }] }'
                 style={{
                   flex: 1,
                   padding: 12,
@@ -739,15 +910,57 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
                   outline: "none",
                   resize: "none",
                   marginBottom: 12,
-                  minHeight: 200
+                  minHeight: 160
                 }}
               />
+
+              {/* Format detection preview */}
+              {importType && importPreview && (
+                <div style={{
+                  padding: 10,
+                  marginBottom: 12,
+                  background: importType === 'fixtures' ? "rgba(0,229,255,0.08)" : importType === 'broadcasts' ? "rgba(255,159,28,0.08)" : "rgba(255,255,255,0.04)",
+                  border: `1px solid ${importType === 'fixtures' ? "rgba(0,229,255,0.3)" : importType === 'broadcasts' ? "rgba(255,159,28,0.3)" : "#2a2a4a"}`,
+                  borderRadius: 8
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                    <Icon name={importType === 'fixtures' ? 'calendar' : importType === 'broadcasts' ? 'tv' : 'list'} size={12} color={importType === 'fixtures' ? '#00e5ff' : importType === 'broadcasts' ? '#ff9f1c' : '#aaa'} />
+                    <span style={{
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: importType === 'fixtures' ? '#00e5ff' : importType === 'broadcasts' ? '#ff9f1c' : '#aaa',
+                      textTransform: 'uppercase'
+                    }}>
+                      {importType === 'fixtures' ? 'TheSportsDB Fixtures' : importType === 'broadcasts' ? 'TheSportsDB Broadcasts' : 'Legacy Format'}
+                    </span>
+                    <span style={{ fontSize: 10, color: "#666" }}>
+                      ({importPreview.count} items)
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 10, color: "#888", lineHeight: 1.5, fontFamily: "monospace" }}>
+                    {importPreview.sample.map((item, i) => (
+                      <div key={i} style={{ marginBottom: 2 }}>
+                        {importType === 'fixtures' && `• ${item.sport}: ${item.event} (${item.date})`}
+                        {importType === 'broadcasts' && `• ${item.event} → ${item.channel} (${item.country})`}
+                        {importType === 'legacy' && `• ${item.sport}: ${item.teams} (${item.date})`}
+                      </div>
+                    ))}
+                    {importPreview.count > 3 && <div style={{ color: "#555" }}>...and {importPreview.count - 3} more</div>}
+                  </div>
+                  {importType === 'broadcasts' && (
+                    <div style={{ fontSize: 9, color: "#ff9f1c", marginTop: 6, fontStyle: "italic" }}>
+                      Note: Broadcasts will be linked to fixtures by event ID. Import fixtures first if needed.
+                    </div>
+                  )}
+                </div>
+              )}
+
               {error && <div style={{ padding: 8, marginBottom: 12, background: "rgba(244,67,54,0.15)", border: "1px solid rgba(244,67,54,0.3)", borderRadius: 6, color: "#e57373", fontSize: 11 }}>{error}</div>}
               {success && <div style={{ padding: 8, marginBottom: 12, background: "rgba(76,175,80,0.15)", border: "1px solid rgba(76,175,80,0.3)", borderRadius: 6, color: "#81c784", fontSize: 11 }}>{success}</div>}
               <div style={{ display: "flex", gap: 8 }}>
                 <button onClick={onClose} style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px solid #2a2a4a", background: "rgba(255,255,255,0.05)", color: "#aaa", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
                 <button onClick={handleImport} disabled={!jsonData.trim() || importing} style={{ flex: 2, padding: "10px 0", borderRadius: 8, border: "none", background: jsonData.trim() && !importing ? "linear-gradient(135deg,#00e5ff,#7c4dff)" : "#2a2a4a", color: "#fff", fontSize: 14, fontWeight: 600, cursor: jsonData.trim() && !importing ? "pointer" : "not-allowed" }}>
-                  {importing ? "Importing..." : "Import to Supabase"}
+                  {importing ? "Importing..." : importType === 'fixtures' ? 'Import Fixtures' : importType === 'broadcasts' ? 'Import Broadcasts' : 'Import to Supabase'}
                 </button>
               </div>
             </div>
