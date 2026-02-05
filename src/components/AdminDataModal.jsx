@@ -732,6 +732,18 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
   }
 
   useEffect(() => {
+    // Clear status messages when switching tabs
+    setError("")
+    setSuccess("")
+    setFetchResult(null)
+    setBroadcastResult(null)
+    setImportType(null)
+    setImportPreview(null)
+    setJsonData("")
+    setSelectedFixtures([])
+    setSelectedBroadcasts([])
+
+    // Load data for specific tabs
     if (activeTab === 'logs') {
       loadLogs()
     } else if (activeTab === 'broadcasts') {
