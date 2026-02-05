@@ -2,7 +2,7 @@ name: API Sports Integration
 
 on:
   schedule:
-    - cron: '0 */6 * * *'   # Fetch & Cleanup: Every 6 hours (12 AM, 6 AM, 12 PM, 6 PM UTC)
+    - cron: '0 */3 * * *'   # Fetch & Cleanup: Every 3 hours (12 AM, 6 AM, 12 PM, 6 PM UTC)
   workflow_dispatch:          # Allow manual trigger
 
 jobs:
