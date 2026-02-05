@@ -11,9 +11,18 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
   const [importing, setImporting] = useState(false)
   const [fetching, setFetching] = useState(false)
   const [selectedDates, setSelectedDates] = useState(['today', 'tomorrow'])
+  const [fetchBroadcastsToo, setFetchBroadcastsToo] = useState(true)
   const [logs, setLogs] = useState([])
   const [loadingLogs, setLoadingLogs] = useState(false)
   const [fetchResult, setFetchResult] = useState(null)
+  const [broadcastResult, setBroadcastResult] = useState(null)
+  const [fixtures, setFixtures] = useState([])
+  const [loadingFixtures, setLoadingFixtures] = useState(false)
+  const [selectedFixtures, setSelectedFixtures] = useState([])
+  const [deletingFixtures, setDeletingFixtures] = useState(false)
+  const [showDeleteFixturesConfirm, setShowDeleteFixturesConfirm] = useState(false)
+  const [searchFixture, setSearchFixture] = useState("")
+  const [sportFilter, setSportFilter] = useState("all")
   const [broadcasts, setBroadcasts] = useState([])
   const [loadingBroadcasts, setLoadingBroadcasts] = useState(false)
   const [selectedBroadcasts, setSelectedBroadcasts] = useState([])
@@ -94,6 +103,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
     setError("")
     setSuccess("")
     setFetchResult(null)
+    setBroadcastResult(null)
 
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -101,6 +111,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
 
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 
+      // Step 1: Fetch fixtures
       const response = await fetch(`${supabaseUrl}/functions/v1/fetch-all-sports`, {
         method: 'POST',
         headers: {
@@ -117,7 +128,33 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
 
       if (result.success || result.status === 'partial') {
         setFetchResult(result)
-        setSuccess(`Successfully fetched ${result.eventsFound} events across ${result.sportsFound} sports!`)
+
+        // Step 2: Optionally fetch broadcasts
+        if (fetchBroadcastsToo) {
+          const broadcastResponse = await fetch(`${supabaseUrl}/functions/v1/fetch-broadcasts`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              dates: selectedDates,
+              trigger: 'manual'
+            })
+          })
+
+          const broadcastData = await broadcastResponse.json()
+          setBroadcastResult(broadcastData)
+
+          if (broadcastData.success || broadcastData.status === 'partial') {
+            setSuccess(`Fetched ${result.eventsFound} events across ${result.sportsFound} sports + ${broadcastData.broadcastsInserted} broadcasts!`)
+          } else {
+            setSuccess(`Fetched ${result.eventsFound} events across ${result.sportsFound} sports. Broadcasts failed: ${broadcastData.error || 'Unknown'}`)
+          }
+        } else {
+          setSuccess(`Successfully fetched ${result.eventsFound} events across ${result.sportsFound} sports!`)
+        }
+
         setTimeout(() => { onUpdate() }, 1000)
       } else {
         setError("Fetch failed: " + (result.error || 'Unknown error'))
@@ -221,6 +258,106 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
       console.error('Error loading broadcasts:', e)
     }
     setLoadingBroadcasts(false)
+  }
+
+  const loadFixtures = async () => {
+    setLoadingFixtures(true)
+    try {
+      const { data, error } = await supabase
+        .from('matches')
+        .select('*')
+        .order('match_date', { ascending: false })
+        .limit(500)
+
+      if (error) throw error
+      setFixtures(data || [])
+    } catch (e) {
+      console.error('Error loading fixtures:', e)
+    }
+    setLoadingFixtures(false)
+  }
+
+  const toggleFixtureSelection = (fixtureId) => {
+    setSelectedFixtures(prev =>
+      prev.includes(fixtureId)
+        ? prev.filter(id => id !== fixtureId)
+        : [...prev, fixtureId]
+    )
+  }
+
+  const toggleSelectAllFixtures = () => {
+    const filteredFixtures = getFilteredFixtures()
+    if (selectedFixtures.length === filteredFixtures.length) {
+      setSelectedFixtures([])
+    } else {
+      setSelectedFixtures(filteredFixtures.map(f => f.id))
+    }
+  }
+
+  const confirmBulkDeleteFixtures = () => {
+    if (selectedFixtures.length === 0) return
+    setShowDeleteFixturesConfirm(true)
+  }
+
+  const handleBulkDeleteFixtures = async () => {
+    if (selectedFixtures.length === 0) return
+
+    setDeletingFixtures(true)
+    try {
+      // Delete fixtures - broadcasts and votes will cascade delete
+      const { error } = await supabase
+        .from('matches')
+        .delete()
+        .in('id', selectedFixtures)
+
+      if (error) throw error
+
+      // Log the bulk deletion
+      await logAdminAction('fixtures_deleted', {
+        extraData: {
+          deleted_count: selectedFixtures.length,
+          fixture_ids: selectedFixtures.slice(0, 10) // Log first 10 for reference
+        }
+      })
+
+      setSuccess(`Successfully deleted ${selectedFixtures.length} fixture${selectedFixtures.length > 1 ? 's' : ''} (and associated broadcasts/votes)`)
+      setSelectedFixtures([])
+      await loadFixtures()
+      onUpdate()
+      setTimeout(() => setSuccess(""), 3000)
+    } catch (e) {
+      setError('Error deleting fixtures: ' + e.message)
+      setTimeout(() => setError(""), 3000)
+    }
+    setDeletingFixtures(false)
+    setShowDeleteFixturesConfirm(false)
+  }
+
+  const getFilteredFixtures = () => {
+    return fixtures.filter(fixture => {
+      // Sport filter
+      if (sportFilter !== "all" && fixture.sport !== sportFilter) {
+        return false
+      }
+
+      // Search filter
+      if (searchFixture) {
+        const searchTerm = searchFixture.toLowerCase()
+        const teams = `${fixture.home} ${fixture.away}`.toLowerCase()
+        const league = (fixture.league || '').toLowerCase()
+        const sport = (fixture.sport || '').toLowerCase()
+
+        if (!teams.includes(searchTerm) && !league.includes(searchTerm) && !sport.includes(searchTerm)) {
+          return false
+        }
+      }
+
+      return true
+    })
+  }
+
+  const getUniqueSports = () => {
+    return [...new Set(fixtures.map(f => f.sport))].sort()
   }
 
   const toggleBroadcastSelection = (broadcastId) => {
@@ -443,6 +580,8 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
       loadBroadcasts()
     } else if (activeTab === 'users') {
       loadUsers()
+    } else if (activeTab === 'fixtures') {
+      loadFixtures()
     }
   }, [activeTab, logTypeFilter])
 
@@ -544,6 +683,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
           {[
             { id: 'import', label: 'Import JSON', icon: 'upload' },
             { id: 'fetch', label: 'Fetch from API', icon: 'download' },
+            { id: 'fixtures', label: 'Fixtures', icon: 'calendar' },
             { id: 'broadcasts', label: 'Broadcasts', icon: 'tv' },
             { id: 'users', label: 'Users', icon: 'shield' },
             { id: 'logs', label: 'View Logs', icon: 'list' }
@@ -663,6 +803,43 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
                 </div>
               </div>
 
+              {/* Also fetch broadcasts toggle */}
+              <div
+                onClick={() => setFetchBroadcastsToo(!fetchBroadcastsToo)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "10px 12px",
+                  borderRadius: 8,
+                  border: fetchBroadcastsToo ? "1px solid rgba(0,229,255,0.3)" : "1px solid #2a2a4a",
+                  background: fetchBroadcastsToo ? "rgba(0,229,255,0.08)" : "rgba(255,255,255,0.02)",
+                  cursor: "pointer"
+                }}
+              >
+                <div style={{
+                  width: 18,
+                  height: 18,
+                  borderRadius: 4,
+                  border: fetchBroadcastsToo ? "2px solid #00e5ff" : "2px solid #444",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: fetchBroadcastsToo ? "#00e5ff" : "transparent",
+                  flexShrink: 0
+                }}>
+                  {fetchBroadcastsToo && <Icon name="check" size={12} color="#000" />}
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: fetchBroadcastsToo ? "#00e5ff" : "#aaa", fontWeight: 600 }}>
+                    Also fetch TV broadcasts
+                  </div>
+                  <div style={{ fontSize: 10, color: "#666", marginTop: 2 }}>
+                    Link broadcast channels to fixtures from TheSportsDB
+                  </div>
+                </div>
+              </div>
+
               {fetchResult && (
                 <div style={{
                   padding: 12,
@@ -699,6 +876,25 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
                 </div>
               )}
 
+              {broadcastResult && (
+                <div style={{
+                  padding: 12,
+                  background: getStatusBg(broadcastResult.status),
+                  border: `1px solid ${getStatusBorder(broadcastResult.status)}`,
+                  borderRadius: 8
+                }}>
+                  <div style={{ fontSize: 12, color: getStatusColor(broadcastResult.status), marginBottom: 8, fontWeight: 600 }}>
+                    Broadcasts {broadcastResult.status === 'success' ? 'Linked' : broadcastResult.status === 'partial' ? 'Partially Linked' : 'Failed'}
+                  </div>
+                  <div style={{ fontSize: 11, color: "#aaa", lineHeight: 1.6 }}>
+                    • TV Events Found: {broadcastResult.tvEventsFound}<br />
+                    • Matched: {broadcastResult.matched}<br />
+                    • Broadcasts Inserted: {broadcastResult.broadcastsInserted}
+                    {broadcastResult.unmatched > 0 && <><br />• Unmatched: {broadcastResult.unmatched}</>}
+                  </div>
+                </div>
+              )}
+
               {error && <div style={{ padding: 8, background: "rgba(244,67,54,0.15)", border: "1px solid rgba(244,67,54,0.3)", borderRadius: 6, color: "#e57373", fontSize: 11 }}>{error}</div>}
               {success && <div style={{ padding: 8, background: "rgba(76,175,80,0.15)", border: "1px solid rgba(76,175,80,0.3)", borderRadius: 6, color: "#81c784", fontSize: 11 }}>{success}</div>}
 
@@ -719,9 +915,213 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
                     cursor: selectedDates.length > 0 && !fetching ? "pointer" : "not-allowed"
                   }}
                 >
-                  {fetching ? "Fetching..." : "Fetch All Sports from TheSportsDB"}
+                  {fetching ? "Fetching..." : `Fetch All Sports${fetchBroadcastsToo ? ' + Broadcasts' : ''}`}
                 </button>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'fixtures' && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 8 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ fontSize: 11, color: "#888" }}>
+                    {fixtures.length} fixture{fixtures.length !== 1 ? 's' : ''} total
+                    {selectedFixtures.length > 0 && ` • ${selectedFixtures.length} selected`}
+                  </div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    {selectedFixtures.length > 0 && (
+                      <button
+                        onClick={confirmBulkDeleteFixtures}
+                        disabled={deletingFixtures}
+                        style={{
+                          padding: "4px 10px",
+                          borderRadius: 6,
+                          border: "1px solid rgba(244,67,54,0.4)",
+                          background: "rgba(244,67,54,0.15)",
+                          color: "#e57373",
+                          fontSize: 10,
+                          cursor: deletingFixtures ? "not-allowed" : "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 4,
+                          fontWeight: 600
+                        }}
+                      >
+                        <Icon name="x" size={10} />
+                        {deletingFixtures ? "Deleting..." : `Delete (${selectedFixtures.length})`}
+                      </button>
+                    )}
+                    <button
+                      onClick={loadFixtures}
+                      disabled={loadingFixtures}
+                      style={{
+                        padding: "4px 10px",
+                        borderRadius: 6,
+                        border: "1px solid #2a2a4a",
+                        background: "rgba(255,255,255,0.05)",
+                        color: "#aaa",
+                        fontSize: 10,
+                        cursor: loadingFixtures ? "not-allowed" : "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 4
+                      }}
+                    >
+                      <Icon name="refresh" size={10} />
+                      {loadingFixtures ? "..." : "Refresh"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Filters row */}
+                <div style={{ display: "flex", gap: 8 }}>
+                  {/* Sport filter */}
+                  <select
+                    value={sportFilter}
+                    onChange={(e) => setSportFilter(e.target.value)}
+                    style={{
+                      padding: "6px 10px",
+                      borderRadius: 6,
+                      border: "1px solid #2a2a4a",
+                      background: "#111122",
+                      color: "#aaa",
+                      fontSize: 11,
+                      outline: "none",
+                      cursor: "pointer",
+                      minWidth: 120
+                    }}
+                  >
+                    <option value="all">All Sports</option>
+                    {getUniqueSports().map(sport => (
+                      <option key={sport} value={sport}>{sport}</option>
+                    ))}
+                  </select>
+
+                  {/* Search input */}
+                  <div style={{ position: "relative", flex: 1 }}>
+                    <Icon name="search" size={12} color="#555" style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+                    <input
+                      value={searchFixture}
+                      onChange={(e) => setSearchFixture(e.target.value)}
+                      placeholder="Search teams, leagues..."
+                      style={{
+                        width: "100%",
+                        padding: "6px 10px 6px 30px",
+                        borderRadius: 6,
+                        border: "1px solid #2a2a4a",
+                        background: "#111122",
+                        color: "#fff",
+                        fontSize: 11,
+                        outline: "none",
+                        boxSizing: "border-box"
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {error && <div style={{ padding: 8, marginBottom: 8, background: "rgba(244,67,54,0.15)", border: "1px solid rgba(244,67,54,0.3)", borderRadius: 6, color: "#e57373", fontSize: 11 }}>{error}</div>}
+              {success && <div style={{ padding: 8, marginBottom: 8, background: "rgba(76,175,80,0.15)", border: "1px solid rgba(76,175,80,0.3)", borderRadius: 6, color: "#81c784", fontSize: 11 }}>{success}</div>}
+
+              {loadingFixtures ? (
+                <div style={{ textAlign: "center", padding: 40, color: "#555" }}>
+                  <div style={{ fontSize: 12 }}>Loading fixtures...</div>
+                </div>
+              ) : fixtures.length === 0 ? (
+                <div style={{ textAlign: "center", padding: 40, color: "#444" }}>
+                  <Icon name="calendar" size={24} color="#444" style={{ marginBottom: 8, opacity: 0.4 }} />
+                  <p style={{ margin: 0, fontSize: 12 }}>No fixtures yet</p>
+                </div>
+              ) : (
+                <>
+                  {getFilteredFixtures().length > 0 && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "rgba(255,255,255,0.02)", borderRadius: 6, marginBottom: 4 }}>
+                      <button
+                        onClick={toggleSelectAllFixtures}
+                        style={{
+                          width: 18,
+                          height: 18,
+                          borderRadius: 4,
+                          border: selectedFixtures.length === getFilteredFixtures().length ? "2px solid #00e5ff" : "2px solid #444",
+                          background: selectedFixtures.length === getFilteredFixtures().length ? "#00e5ff" : "transparent",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          cursor: "pointer"
+                        }}
+                      >
+                        {selectedFixtures.length === getFilteredFixtures().length && <Icon name="check" size={12} color="#000" />}
+                      </button>
+                      <span style={{ fontSize: 11, color: "#aaa", fontWeight: 600 }}>
+                        Select All ({getFilteredFixtures().length})
+                      </span>
+                    </div>
+                  )}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 350, overflowY: "auto" }}>
+                    {getFilteredFixtures().map(fixture => {
+                      const isSelected = selectedFixtures.includes(fixture.id)
+                      return (
+                        <div
+                          key={fixture.id}
+                          style={{
+                            padding: 10,
+                            background: isSelected ? "rgba(0,229,255,0.08)" : "rgba(255,255,255,0.03)",
+                            border: isSelected ? "1px solid rgba(0,229,255,0.3)" : "1px solid #2a2a4a",
+                            borderRadius: 6,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 10,
+                            cursor: "pointer"
+                          }}
+                          onClick={() => toggleFixtureSelection(fixture.id)}
+                        >
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              toggleFixtureSelection(fixture.id)
+                            }}
+                            style={{
+                              width: 18,
+                              height: 18,
+                              borderRadius: 4,
+                              border: isSelected ? "2px solid #00e5ff" : "2px solid #444",
+                              background: isSelected ? "#00e5ff" : "transparent",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              cursor: "pointer",
+                              flexShrink: 0
+                            }}
+                          >
+                            {isSelected && <Icon name="check" size={12} color="#000" />}
+                          </button>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 11, color: "#fff", marginBottom: 4, fontWeight: 500 }}>
+                              {fixture.home} vs {fixture.away}
+                            </div>
+                            <div style={{ fontSize: 10, color: "#888", lineHeight: 1.4 }}>
+                              {fixture.sport} • {fixture.league}<br />
+                              {fixture.match_date} {fixture.match_time}
+                            </div>
+                          </div>
+                          <div style={{
+                            padding: "2px 6px",
+                            borderRadius: 4,
+                            background: "rgba(0,229,255,0.1)",
+                            fontSize: 9,
+                            color: "#00e5ff",
+                            fontWeight: 600,
+                            whiteSpace: "nowrap"
+                          }}>
+                            {fixture.sport}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </>
+              )}
             </div>
           )}
 
@@ -1167,13 +1567,26 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
         </div>
       </div>
 
-      {/* Confirm Delete Modal */}
+      {/* Confirm Delete Broadcasts Modal */}
       {showDeleteConfirm && (
         <ConfirmModal
           onClose={() => setShowDeleteConfirm(false)}
           onConfirm={handleBulkDelete}
           title="Delete Broadcasts"
           message={`Are you sure you want to delete ${selectedBroadcasts.length} broadcast${selectedBroadcasts.length > 1 ? 's' : ''}? This action cannot be undone.`}
+          confirmText="Delete"
+          cancelText="Cancel"
+          confirmColor="#e53935"
+        />
+      )}
+
+      {/* Confirm Delete Fixtures Modal */}
+      {showDeleteFixturesConfirm && (
+        <ConfirmModal
+          onClose={() => setShowDeleteFixturesConfirm(false)}
+          onConfirm={handleBulkDeleteFixtures}
+          title="Delete Fixtures"
+          message={`Are you sure you want to delete ${selectedFixtures.length} fixture${selectedFixtures.length > 1 ? 's' : ''}? This will also delete all associated broadcasts and votes. This action cannot be undone.`}
           confirmText="Delete"
           cancelText="Cancel"
           confirmColor="#e53935"

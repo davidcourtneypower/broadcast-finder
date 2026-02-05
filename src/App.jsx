@@ -687,7 +687,7 @@ function App() {
               Loading Fixtures
             </div>
             <div style={{ fontSize: 12, color: "#666" }}>
-              Fetching matches and preparing times...
+              Fetching our data...
             </div>
           </div>
         ) : filtered.length === 0 ? (
@@ -761,7 +761,7 @@ function App() {
       {/* Footer - Sticky */}
       <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", padding: "12px 14px", background: "#0a0a18", textAlign: "center", flexShrink: 0 }}>
         <p style={{ margin: 0, fontSize: 10, color: "#3a3a4a", fontFamily: "monospace", lineHeight: 1.4 }}>
-          Powered by Supabase · Real-time Community Broadcasts
+          TeamDash · Real-time Community Broadcasts
         </p>
       </div>
       
