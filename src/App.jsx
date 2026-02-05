@@ -771,7 +771,7 @@ function App() {
       {showAuth && <AuthModal onClose={() => setShowAuth(false)} signInWithGoogle={signInWithGoogle} />}
       {showFilters && <FilterModal onClose={() => setShowFilters(false)} filters={filters} onApply={setFilters} allSports={allSports} matches={matches} />}
       {showAddBroadcast && selectedMatch && <AddBroadcastModal onClose={() => setShowAddBroadcast(false)} match={selectedMatch} onAdd={handleAddBroadcast} user={user} />}
-      {showAdminPanel && <AdminDataModal onClose={() => setShowAdminPanel(false)} onUpdate={loadMatches} />}
+      {showAdminPanel && <AdminDataModal onClose={() => setShowAdminPanel(false)} onUpdate={loadMatches} currentUserEmail={user?.email} />}
       {showUserSettings && <UserSettingsModal onClose={() => setShowUserSettings(false)} onSave={handleSettingsSaved} user={user} />}
     </div>
   )
