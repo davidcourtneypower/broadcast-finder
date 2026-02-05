@@ -36,7 +36,7 @@ export const CHANNELS_BY_COUNTRY = {
 
 export const COUNTRIES = Object.keys(CHANNELS_BY_COUNTRY)
 
-export const DATE_TABS = ["Today", "Tomorrow", "This Week"]
+export const DATE_TABS = ["Today", "Tomorrow"]
 
 export const FLAG_MAP = {
   USA: "🇺🇸", UK: "🇬🇧", Canada: "🇨🇦", Australia: "🇦🇺",

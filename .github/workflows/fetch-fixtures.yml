@@ -23,8 +23,21 @@ jobs:
             -H "Content-Type: application/json" \
             -d '{"sport":"basketball","dates":["today","tomorrow"],"trigger":"scheduled"}'
 
+  fetch-broadcasts:
+    runs-on: ubuntu-latest
+    needs: fetch-fixtures  # Run AFTER fixtures are fetched
+    steps:
+      - name: Fetch TV Broadcasts from TheSportsDB
+        run: |
+          curl -X POST "${{ secrets.PROJECT_URL }}/functions/v1/fetch-broadcasts" \
+            -H "Authorization: Bearer ${{ secrets.SERVICE_ROLE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"sports":["football","basketball"],"dates":["today","tomorrow"],"trigger":"scheduled"}'
+        timeout-minutes: 10  # Allow for rate limiting delays (1 req/min on free tier)
+
   cleanup-old-data:
     runs-on: ubuntu-latest
+    needs: fetch-broadcasts  # Run after broadcasts are fetched
     steps:
       - name: Cleanup Old Fixtures
         run: |
