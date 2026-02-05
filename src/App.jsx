@@ -253,60 +253,29 @@ function App() {
     }]).select()
 
     if (!error && data && data.length > 0) {
-      const newBroadcast = {
-        ...data[0],
-        voteStats: { up: 0, down: 0, myVote: null }
+      const newBroadcast = data[0]
+
+      // Automatically create an "up" vote for the creator
+      const { error: voteError } = await supabase.from("votes").insert([{
+        broadcast_id: newBroadcast.id,
+        user_id_uuid: user.id,
+        user_id: user.id, // Keep legacy field for compatibility
+        vote_type: 'up'
+      }])
+
+      if (voteError) {
+        console.error('Error creating auto-vote:', voteError)
       }
 
-      setMatches(prev => prev.map(m =>
-        m.id === matchId
-          ? { ...m, broadcasts: [...m.broadcasts, newBroadcast] }
-          : m
-      ))
+      // Real-time subscriptions will handle adding the broadcast and vote to state
+      // No need for manual state update here
     }
   }
   
   const handleVote = async (broadcastId, voteType) => {
     if (!user) return
 
-    // Helper function to update vote counts in state
-    const updateVoteCounts = (oldVote, newVote) => {
-      setMatches(prev => prev.map(m => ({
-        ...m,
-        broadcasts: m.broadcasts.map(b => {
-          if (b.id !== broadcastId) return b
-
-          let { up, down } = b.voteStats
-
-          // Remove old vote count
-          if (oldVote === 'up') up--
-          if (oldVote === 'down') down--
-
-          // Add new vote count
-          if (newVote === 'up') up++
-          if (newVote === 'down') down++
-
-          return {
-            ...b,
-            voteStats: { up, down, myVote: newVote }
-          }
-        })
-      })))
-    }
-
     try {
-      // Get current vote state before making changes
-      const currentBroadcast = matches
-        .flatMap(m => m.broadcasts)
-        .find(b => b.id === broadcastId)
-
-      if (!currentBroadcast) {
-        console.error('Broadcast not found:', broadcastId)
-        return
-      }
-
-      const oldVote = currentBroadcast.voteStats.myVote
-
       // Fetch existing vote from database using user_id_uuid
       const { data: existing, error: fetchError } = await supabase
         .from("votes")
@@ -319,7 +288,6 @@ function App() {
         return
       }
 
-      let newVoteType = null
       let dbError = null
 
       if (existing && existing.length > 0) {
@@ -332,7 +300,6 @@ function App() {
             .eq("user_id_uuid", user.id)
 
           dbError = error
-          newVoteType = null
         } else {
           // Change vote: update existing vote
           const { error } = await supabase
@@ -342,7 +309,6 @@ function App() {
             .eq("user_id_uuid", user.id)
 
           dbError = error
-          newVoteType = voteType
         }
       } else {
         // New vote: insert
@@ -356,21 +322,41 @@ function App() {
           }])
 
         dbError = error
-        newVoteType = voteType
       }
 
       if (dbError) {
         console.error('Error updating vote:', dbError)
-        // Could show a toast notification here
         return
       }
 
-      // Update local state after successful database operation
-      updateVoteCounts(oldVote, newVoteType)
+      // Real-time subscription will handle updating the state
+      // No optimistic update needed - rely on real-time for consistency
 
     } catch (error) {
       console.error('Unexpected error in handleVote:', error)
-      // Could show a toast notification here
+    }
+  }
+
+  const handleDeleteBroadcast = async (broadcastId) => {
+    if (!user) return
+
+    try {
+      // Delete the broadcast (votes will be cascade deleted if FK constraint exists)
+      const { error } = await supabase
+        .from("broadcasts")
+        .delete()
+        .eq("id", broadcastId)
+        .eq("created_by_uuid", user.id) // Only allow deleting own broadcasts
+
+      if (error) {
+        console.error('Error deleting broadcast:', error)
+        return
+      }
+
+      // Real-time subscription will handle removing from state
+
+    } catch (error) {
+      console.error('Unexpected error in handleDeleteBroadcast:', error)
     }
   }
 
@@ -664,6 +650,7 @@ function App() {
                   onVote={handleVote}
                   onRequestAuth={() => setShowAuth(true)}
                   onAddBroadcast={openAddBroadcast}
+                  onDeleteBroadcast={handleDeleteBroadcast}
                 />
               ))}
             </div>
