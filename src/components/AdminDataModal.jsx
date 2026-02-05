@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Icon } from './Icon'
 import { supabase } from '../config/supabase'
+import { ConfirmModal } from './ConfirmModal'
 
 export const AdminDataModal = ({ onClose, onUpdate }) => {
   const [activeTab, setActiveTab] = useState('import')
@@ -18,6 +19,12 @@ export const AdminDataModal = ({ onClose, onUpdate }) => {
   const [loadingBroadcasts, setLoadingBroadcasts] = useState(false)
   const [selectedBroadcasts, setSelectedBroadcasts] = useState([])
   const [deletingBroadcasts, setDeletingBroadcasts] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [searchUsername, setSearchUsername] = useState("")
+  const [users, setUsers] = useState([])
+  const [loadingUsers, setLoadingUsers] = useState(false)
+  const [bannedUsers, setBannedUsers] = useState([])
+  const [processingBan, setProcessingBan] = useState(null)
 
   const handleImport = async () => {
     setImporting(true)
@@ -155,14 +162,13 @@ export const AdminDataModal = ({ onClose, onUpdate }) => {
     }
   }
 
+  const confirmBulkDelete = () => {
+    if (selectedBroadcasts.length === 0) return
+    setShowDeleteConfirm(true)
+  }
+
   const handleBulkDelete = async () => {
     if (selectedBroadcasts.length === 0) return
-
-    const confirmed = window.confirm(
-      `Delete ${selectedBroadcasts.length} broadcast${selectedBroadcasts.length > 1 ? 's' : ''}? This action cannot be undone.`
-    )
-
-    if (!confirmed) return
 
     setDeletingBroadcasts(true)
     try {
@@ -184,11 +190,96 @@ export const AdminDataModal = ({ onClose, onUpdate }) => {
     setDeletingBroadcasts(false)
   }
 
+  const loadUsers = async () => {
+    setLoadingUsers(true)
+    try {
+      // Get unique users from broadcasts
+      const { data: broadcastsData, error: broadcastsError } = await supabase
+        .from('broadcasts')
+        .select('created_by, created_by_uuid')
+
+      if (broadcastsError) throw broadcastsError
+
+      // Count broadcasts per user
+      const userMap = {}
+      broadcastsData?.forEach(b => {
+        const email = b.created_by
+        const uuid = b.created_by_uuid
+        if (email && uuid) {
+          if (!userMap[uuid]) {
+            userMap[uuid] = { uuid, email, broadcastCount: 0 }
+          }
+          userMap[uuid].broadcastCount++
+        }
+      })
+
+      const usersList = Object.values(userMap).sort((a, b) => b.broadcastCount - a.broadcastCount)
+      setUsers(usersList)
+
+      // Load banned users
+      const { data: bannedData, error: bannedError } = await supabase
+        .from('banned_users')
+        .select('user_uuid')
+
+      if (!bannedError && bannedData) {
+        setBannedUsers(bannedData.map(b => b.user_uuid))
+      }
+    } catch (e) {
+      console.error('Error loading users:', e)
+      // If banned_users table doesn't exist, just continue without it
+      if (e.message?.includes('banned_users')) {
+        setBannedUsers([])
+      }
+    }
+    setLoadingUsers(false)
+  }
+
+  const handleBanUser = async (userUuid, userEmail) => {
+    setProcessingBan(userUuid)
+    try {
+      const { error } = await supabase
+        .from('banned_users')
+        .insert([{ user_uuid: userUuid, user_email: userEmail, banned_at: new Date().toISOString() }])
+
+      if (error) throw error
+
+      setBannedUsers(prev => [...prev, userUuid])
+      setSuccess(`User ${userEmail} has been banned`)
+      setTimeout(() => setSuccess(""), 3000)
+    } catch (e) {
+      setError('Error banning user: ' + e.message)
+      setTimeout(() => setError(""), 3000)
+    }
+    setProcessingBan(null)
+  }
+
+  const handleUnbanUser = async (userUuid, userEmail) => {
+    setProcessingBan(userUuid)
+    try {
+      const { error } = await supabase
+        .from('banned_users')
+        .delete()
+        .eq('user_uuid', userUuid)
+
+      if (error) throw error
+
+      setBannedUsers(prev => prev.filter(id => id !== userUuid))
+      setSuccess(`User ${userEmail} has been unbanned`)
+      setTimeout(() => setSuccess(""), 3000)
+    } catch (e) {
+      setError('Error unbanning user: ' + e.message)
+      setTimeout(() => setError(""), 3000)
+    }
+    setProcessingBan(null)
+  }
+
   useEffect(() => {
     if (activeTab === 'logs') {
       loadLogs()
     } else if (activeTab === 'broadcasts') {
       loadBroadcasts()
+    } else if (activeTab === 'users') {
+      loadUsers()
     }
   }, [activeTab])
 
@@ -234,7 +325,8 @@ export const AdminDataModal = ({ onClose, onUpdate }) => {
           {[
             { id: 'import', label: 'Import JSON', icon: 'upload' },
             { id: 'fetch', label: 'Fetch from API', icon: 'download' },
-            { id: 'broadcasts', label: 'Broadcasts', icon: 'tv' },
+            { id: 'broadcasts', label: 'Broadcast Logs', icon: 'tv' },
+            { id: 'users', label: 'Users', icon: 'shield' },
             { id: 'logs', label: 'View Logs', icon: 'list' }
           ].map(tab => {
             const active = activeTab === tab.id
@@ -434,53 +526,76 @@ export const AdminDataModal = ({ onClose, onUpdate }) => {
 
           {activeTab === 'broadcasts' && (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                <div style={{ fontSize: 11, color: "#888" }}>
-                  {broadcasts.length} broadcast{broadcasts.length !== 1 ? 's' : ''} total
-                  {selectedBroadcasts.length > 0 && ` • ${selectedBroadcasts.length} selected`}
-                </div>
-                <div style={{ display: "flex", gap: 6 }}>
-                  {selectedBroadcasts.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 8 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ fontSize: 11, color: "#888" }}>
+                    {broadcasts.length} broadcast{broadcasts.length !== 1 ? 's' : ''} total
+                    {selectedBroadcasts.length > 0 && ` • ${selectedBroadcasts.length} selected`}
+                  </div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    {selectedBroadcasts.length > 0 && (
+                      <button
+                        onClick={confirmBulkDelete}
+                        disabled={deletingBroadcasts}
+                        style={{
+                          padding: "4px 10px",
+                          borderRadius: 6,
+                          border: "1px solid rgba(244,67,54,0.4)",
+                          background: "rgba(244,67,54,0.15)",
+                          color: "#e57373",
+                          fontSize: 10,
+                          cursor: deletingBroadcasts ? "not-allowed" : "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 4,
+                          fontWeight: 600
+                        }}
+                      >
+                        <Icon name="x" size={10} />
+                        {deletingBroadcasts ? "Deleting..." : `Delete (${selectedBroadcasts.length})`}
+                      </button>
+                    )}
                     <button
-                      onClick={handleBulkDelete}
-                      disabled={deletingBroadcasts}
+                      onClick={loadBroadcasts}
+                      disabled={loadingBroadcasts}
                       style={{
                         padding: "4px 10px",
                         borderRadius: 6,
-                        border: "1px solid rgba(244,67,54,0.4)",
-                        background: "rgba(244,67,54,0.15)",
-                        color: "#e57373",
+                        border: "1px solid #2a2a4a",
+                        background: "rgba(255,255,255,0.05)",
+                        color: "#aaa",
                         fontSize: 10,
-                        cursor: deletingBroadcasts ? "not-allowed" : "pointer",
+                        cursor: loadingBroadcasts ? "not-allowed" : "pointer",
                         display: "flex",
                         alignItems: "center",
-                        gap: 4,
-                        fontWeight: 600
+                        gap: 4
                       }}
                     >
-                      <Icon name="x" size={10} />
-                      {deletingBroadcasts ? "Deleting..." : `Delete (${selectedBroadcasts.length})`}
+                      <Icon name="refresh" size={10} />
+                      {loadingBroadcasts ? "..." : "Refresh"}
                     </button>
-                  )}
-                  <button
-                    onClick={loadBroadcasts}
-                    disabled={loadingBroadcasts}
+                  </div>
+                </div>
+
+                {/* Search by username */}
+                <div style={{ position: "relative" }}>
+                  <Icon name="search" size={12} color="#555" style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+                  <input
+                    value={searchUsername}
+                    onChange={(e) => setSearchUsername(e.target.value)}
+                    placeholder="Search by username..."
                     style={{
-                      padding: "4px 10px",
+                      width: "100%",
+                      padding: "6px 10px 6px 30px",
                       borderRadius: 6,
                       border: "1px solid #2a2a4a",
-                      background: "rgba(255,255,255,0.05)",
-                      color: "#aaa",
-                      fontSize: 10,
-                      cursor: loadingBroadcasts ? "not-allowed" : "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 4
+                      background: "#111122",
+                      color: "#fff",
+                      fontSize: 11,
+                      outline: "none",
+                      boxSizing: "border-box"
                     }}
-                  >
-                    <Icon name="refresh" size={10} />
-                    {loadingBroadcasts ? "..." : "Refresh"}
-                  </button>
+                  />
                 </div>
               </div>
 
@@ -520,10 +635,16 @@ export const AdminDataModal = ({ onClose, onUpdate }) => {
                     </div>
                   )}
                   <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 400, overflowY: "auto" }}>
-                    {broadcasts.map(broadcast => {
-                      const match = broadcast.matches
-                      const isSelected = selectedBroadcasts.includes(broadcast.id)
-                      return (
+                    {broadcasts
+                      .filter(broadcast => {
+                        if (!searchUsername) return true
+                        const username = broadcast.created_by || ''
+                        return username.toLowerCase().includes(searchUsername.toLowerCase())
+                      })
+                      .map(broadcast => {
+                        const match = broadcast.matches
+                        const isSelected = selectedBroadcasts.includes(broadcast.id)
+                        return (
                         <div
                           key={broadcast.id}
                           style={{
@@ -578,6 +699,101 @@ export const AdminDataModal = ({ onClose, onUpdate }) => {
                     })}
                   </div>
                 </>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'users' && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <div style={{ fontSize: 11, color: "#888" }}>
+                  {users.length} user{users.length !== 1 ? 's' : ''} total
+                </div>
+                <button
+                  onClick={loadUsers}
+                  disabled={loadingUsers}
+                  style={{
+                    padding: "4px 10px",
+                    borderRadius: 6,
+                    border: "1px solid #2a2a4a",
+                    background: "rgba(255,255,255,0.05)",
+                    color: "#aaa",
+                    fontSize: 10,
+                    cursor: loadingUsers ? "not-allowed" : "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4
+                  }}
+                >
+                  <Icon name="refresh" size={10} />
+                  {loadingUsers ? "..." : "Refresh"}
+                </button>
+              </div>
+
+              {error && <div style={{ padding: 8, marginBottom: 8, background: "rgba(244,67,54,0.15)", border: "1px solid rgba(244,67,54,0.3)", borderRadius: 6, color: "#e57373", fontSize: 11 }}>{error}</div>}
+              {success && <div style={{ padding: 8, marginBottom: 8, background: "rgba(76,175,80,0.15)", border: "1px solid rgba(76,175,80,0.3)", borderRadius: 6, color: "#81c784", fontSize: 11 }}>{success}</div>}
+
+              {loadingUsers ? (
+                <div style={{ textAlign: "center", padding: 40, color: "#555" }}>
+                  <div style={{ fontSize: 12 }}>Loading users...</div>
+                </div>
+              ) : users.length === 0 ? (
+                <div style={{ textAlign: "center", padding: 40, color: "#444" }}>
+                  <Icon name="shield" size={24} color="#444" style={{ marginBottom: 8, opacity: 0.4 }} />
+                  <p style={{ margin: 0, fontSize: 12 }}>No users yet</p>
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 400, overflowY: "auto" }}>
+                  {users.map(user => {
+                    const isBanned = bannedUsers.includes(user.uuid)
+                    const isProcessing = processingBan === user.uuid
+                    return (
+                      <div
+                        key={user.uuid}
+                        style={{
+                          padding: 12,
+                          background: isBanned ? "rgba(244,67,54,0.08)" : "rgba(255,255,255,0.03)",
+                          border: isBanned ? "1px solid rgba(244,67,54,0.3)" : "1px solid #2a2a4a",
+                          borderRadius: 6,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 10
+                        }}
+                      >
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12, color: "#fff", marginBottom: 4, fontWeight: 500 }}>
+                            {user.email}
+                          </div>
+                          <div style={{ fontSize: 10, color: "#888" }}>
+                            {user.broadcastCount} broadcast{user.broadcastCount !== 1 ? 's' : ''}
+                          </div>
+                          {isBanned && (
+                            <div style={{ fontSize: 9, color: "#e57373", marginTop: 4, fontWeight: 600, textTransform: "uppercase" }}>
+                              BANNED
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => isBanned ? handleUnbanUser(user.uuid, user.email) : handleBanUser(user.uuid, user.email)}
+                          disabled={isProcessing}
+                          style={{
+                            padding: "6px 12px",
+                            borderRadius: 6,
+                            border: isBanned ? "1px solid rgba(76,175,80,0.5)" : "1px solid rgba(244,67,54,0.4)",
+                            background: isBanned ? "rgba(76,175,80,0.15)" : "rgba(244,67,54,0.15)",
+                            color: isBanned ? "#81c784" : "#e57373",
+                            fontSize: 10,
+                            fontWeight: 600,
+                            cursor: isProcessing ? "not-allowed" : "pointer"
+                          }}
+                        >
+                          {isProcessing ? "..." : isBanned ? "Unban" : "Ban User"}
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
               )}
             </div>
           )}
@@ -668,6 +884,19 @@ export const AdminDataModal = ({ onClose, onUpdate }) => {
           )}
         </div>
       </div>
+
+      {/* Confirm Delete Modal */}
+      {showDeleteConfirm && (
+        <ConfirmModal
+          onClose={() => setShowDeleteConfirm(false)}
+          onConfirm={handleBulkDelete}
+          title="Delete Broadcasts"
+          message={`Are you sure you want to delete ${selectedBroadcasts.length} broadcast${selectedBroadcasts.length > 1 ? 's' : ''}? This action cannot be undone.`}
+          confirmText="Delete"
+          cancelText="Cancel"
+          confirmColor="#e53935"
+        />
+      )}
     </div>
   )
 }
