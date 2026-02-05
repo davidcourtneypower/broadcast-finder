@@ -186,35 +186,37 @@ function App() {
       .channel('votes-changes')
       .on('postgres_changes',
         { event: '*', schema: 'public', table: 'votes' },
-        (payload) => {
+        async (payload) => {
           console.log('Vote change:', payload)
 
+          // Get the broadcast ID from the payload
+          const broadcastId = payload.new?.broadcast_id || payload.old?.broadcast_id
+          if (!broadcastId) return
+
+          // Refetch all votes for this broadcast to ensure accurate counts
+          const { data: votes } = await supabase
+            .from('votes')
+            .select('*')
+            .eq('broadcast_id', broadcastId)
+
+          // Recalculate vote stats from scratch
+          const voteStats = { up: 0, down: 0, myVote: null }
+          votes?.forEach(v => {
+            if (v.vote_type === 'up') voteStats.up++
+            else if (v.vote_type === 'down') voteStats.down++
+            if (user && (v.user_id_uuid === user.id || v.user_id === user.id)) {
+              voteStats.myVote = v.vote_type
+            }
+          })
+
+          // Update the specific broadcast's vote stats
           setMatches(prev => prev.map(m => ({
             ...m,
             broadcasts: m.broadcasts.map(b => {
-              if (b.id !== payload.new?.broadcast_id && b.id !== payload.old?.broadcast_id) return b
-
-              let { up, down, myVote } = b.voteStats
-
-              if (payload.eventType === 'INSERT') {
-                // New vote
-                if (payload.new.vote_type === 'up') up++
-                else if (payload.new.vote_type === 'down') down++
-                if (user && (payload.new.user_id_uuid === user.id || payload.new.user_id === user.id)) {
-                  myVote = payload.new.vote_type
-                }
-              } else if (payload.eventType === 'DELETE') {
-                // Vote removed
-                if (payload.old.vote_type === 'up') up--
-                else if (payload.old.vote_type === 'down') down--
-                if (user && (payload.old.user_id_uuid === user.id || payload.old.user_id === user.id)) {
-                  myVote = null
-                }
-              }
-
+              if (b.id !== broadcastId) return b
               return {
                 ...b,
-                voteStats: { up: Math.max(0, up), down: Math.max(0, down), myVote }
+                voteStats
               }
             })
           })))
@@ -343,7 +345,12 @@ function App() {
   }
 
   const handleDeleteBroadcast = async (broadcastId) => {
-    if (!user) return
+    if (!user) {
+      console.error('No user found for delete operation')
+      return
+    }
+
+    console.log('Attempting to delete broadcast:', broadcastId, 'isAdmin:', isAdmin)
 
     try {
       // Delete the broadcast (votes will be cascade deleted if FK constraint exists)
@@ -358,17 +365,20 @@ function App() {
         query = query.eq("created_by_uuid", user.id)
       }
 
-      const { error } = await query
+      const { data, error } = await query
 
       if (error) {
         console.error('Error deleting broadcast:', error)
+        alert(`Failed to delete broadcast: ${error.message}`)
         return
       }
 
+      console.log('Broadcast deleted successfully:', data)
       // Real-time subscription will handle removing from state
 
     } catch (error) {
       console.error('Unexpected error in handleDeleteBroadcast:', error)
+      alert(`Unexpected error: ${error.message}`)
     }
   }
 
