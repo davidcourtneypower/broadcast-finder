@@ -519,10 +519,10 @@ function App() {
     [...new Set(matches.map(m => m.sport))].sort(), [matches]
   )
 
-  // Calculate live count based on time
+  // Calculate live count based on time (from filtered matches, excluding hidden finished ones)
   const liveCount = useMemo(() =>
-    matches.filter(m => getMatchStatus(m.match_date, m.match_time, m.sport) === "live").length,
-    [matches]
+    filtered.filter(m => getMatchStatus(m.match_date, m.match_time, m.sport) === "live").length,
+    [filtered]
   )
 
   const activeFilterCount = (filters.sports?.length || 0) +
@@ -570,13 +570,27 @@ function App() {
             </div>
             <div>
               <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: -0.3, color: "#fff" }}>BroadcastFinder</div>
-              <div style={{ fontSize: 10, color: "#555", fontFamily: "monospace" }}>{liveCount} live · {matches.length} matches</div>
+              <div style={{ fontSize: 10, color: "#555", fontFamily: "monospace" }}>{liveCount} live · {filtered.length} matches</div>
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             {isAdmin && (
-              <button onClick={() => setShowAdminPanel(true)} style={{ display: "flex", alignItems: "center", gap: 4, background: "rgba(0,229,255,0.15)", border: "1px solid rgba(0,229,255,0.3)", borderRadius: 7, padding: "4px 8px", color: "#00e5ff", fontSize: 10, cursor: "pointer", fontFamily: "monospace" }}>
-                <Icon name="settings" size={11} /> Admin
+              <button
+                onClick={() => setShowAdminPanel(true)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: "rgba(255,255,255,0.06)",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: 7,
+                  padding: "6px 8px",
+                  color: "#aaa",
+                  cursor: "pointer"
+                }}
+                title="Admin Panel"
+              >
+                <Icon name="shield" size={14} />
               </button>
             )}
             {user ? (

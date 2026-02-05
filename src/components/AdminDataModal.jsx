@@ -14,6 +14,10 @@ export const AdminDataModal = ({ onClose, onUpdate }) => {
   const [logs, setLogs] = useState([])
   const [loadingLogs, setLoadingLogs] = useState(false)
   const [fetchResult, setFetchResult] = useState(null)
+  const [broadcasts, setBroadcasts] = useState([])
+  const [loadingBroadcasts, setLoadingBroadcasts] = useState(false)
+  const [selectedBroadcasts, setSelectedBroadcasts] = useState([])
+  const [deletingBroadcasts, setDeletingBroadcasts] = useState(false)
 
   const handleImport = async () => {
     setImporting(true)
@@ -108,9 +112,83 @@ export const AdminDataModal = ({ onClose, onUpdate }) => {
     setLoadingLogs(false)
   }
 
+  const loadBroadcasts = async () => {
+    setLoadingBroadcasts(true)
+    try {
+      const { data, error } = await supabase
+        .from('broadcasts')
+        .select(`
+          *,
+          matches:match_id (
+            home,
+            away,
+            league,
+            sport,
+            match_date,
+            match_time
+          )
+        `)
+        .order('created_at', { ascending: false })
+        .limit(100)
+
+      if (error) throw error
+      setBroadcasts(data || [])
+    } catch (e) {
+      console.error('Error loading broadcasts:', e)
+    }
+    setLoadingBroadcasts(false)
+  }
+
+  const toggleBroadcastSelection = (broadcastId) => {
+    setSelectedBroadcasts(prev =>
+      prev.includes(broadcastId)
+        ? prev.filter(id => id !== broadcastId)
+        : [...prev, broadcastId]
+    )
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedBroadcasts.length === broadcasts.length) {
+      setSelectedBroadcasts([])
+    } else {
+      setSelectedBroadcasts(broadcasts.map(b => b.id))
+    }
+  }
+
+  const handleBulkDelete = async () => {
+    if (selectedBroadcasts.length === 0) return
+
+    const confirmed = window.confirm(
+      `Delete ${selectedBroadcasts.length} broadcast${selectedBroadcasts.length > 1 ? 's' : ''}? This action cannot be undone.`
+    )
+
+    if (!confirmed) return
+
+    setDeletingBroadcasts(true)
+    try {
+      const { error } = await supabase
+        .from('broadcasts')
+        .delete()
+        .in('id', selectedBroadcasts)
+
+      if (error) throw error
+
+      setSuccess(`Successfully deleted ${selectedBroadcasts.length} broadcast${selectedBroadcasts.length > 1 ? 's' : ''}`)
+      setSelectedBroadcasts([])
+      await loadBroadcasts()
+      setTimeout(() => setSuccess(""), 3000)
+    } catch (e) {
+      setError('Error deleting broadcasts: ' + e.message)
+      setTimeout(() => setError(""), 3000)
+    }
+    setDeletingBroadcasts(false)
+  }
+
   useEffect(() => {
     if (activeTab === 'logs') {
       loadLogs()
+    } else if (activeTab === 'broadcasts') {
+      loadBroadcasts()
     }
   }, [activeTab])
 
@@ -148,7 +226,7 @@ export const AdminDataModal = ({ onClose, onUpdate }) => {
         </button>
 
         <h3 style={{ color: "#fff", margin: "0 0 16px", fontSize: 16, display: "flex", alignItems: "center", gap: 8 }}>
-          <Icon name="settings" size={16} color="#00e5ff" /> Admin Panel
+          <Icon name="shield" size={16} color="#00e5ff" /> Admin Panel
         </h3>
 
         {/* Tabs */}
@@ -156,6 +234,7 @@ export const AdminDataModal = ({ onClose, onUpdate }) => {
           {[
             { id: 'import', label: 'Import JSON', icon: 'upload' },
             { id: 'fetch', label: 'Fetch from API', icon: 'download' },
+            { id: 'broadcasts', label: 'Broadcasts', icon: 'tv' },
             { id: 'logs', label: 'View Logs', icon: 'list' }
           ].map(tab => {
             const active = activeTab === tab.id
@@ -350,6 +429,156 @@ export const AdminDataModal = ({ onClose, onUpdate }) => {
                   {fetching ? "Fetching..." : "Fetch from API-Sports.io"}
                 </button>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'broadcasts' && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <div style={{ fontSize: 11, color: "#888" }}>
+                  {broadcasts.length} broadcast{broadcasts.length !== 1 ? 's' : ''} total
+                  {selectedBroadcasts.length > 0 && ` • ${selectedBroadcasts.length} selected`}
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {selectedBroadcasts.length > 0 && (
+                    <button
+                      onClick={handleBulkDelete}
+                      disabled={deletingBroadcasts}
+                      style={{
+                        padding: "4px 10px",
+                        borderRadius: 6,
+                        border: "1px solid rgba(244,67,54,0.4)",
+                        background: "rgba(244,67,54,0.15)",
+                        color: "#e57373",
+                        fontSize: 10,
+                        cursor: deletingBroadcasts ? "not-allowed" : "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 4,
+                        fontWeight: 600
+                      }}
+                    >
+                      <Icon name="x" size={10} />
+                      {deletingBroadcasts ? "Deleting..." : `Delete (${selectedBroadcasts.length})`}
+                    </button>
+                  )}
+                  <button
+                    onClick={loadBroadcasts}
+                    disabled={loadingBroadcasts}
+                    style={{
+                      padding: "4px 10px",
+                      borderRadius: 6,
+                      border: "1px solid #2a2a4a",
+                      background: "rgba(255,255,255,0.05)",
+                      color: "#aaa",
+                      fontSize: 10,
+                      cursor: loadingBroadcasts ? "not-allowed" : "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4
+                    }}
+                  >
+                    <Icon name="refresh" size={10} />
+                    {loadingBroadcasts ? "..." : "Refresh"}
+                  </button>
+                </div>
+              </div>
+
+              {error && <div style={{ padding: 8, marginBottom: 8, background: "rgba(244,67,54,0.15)", border: "1px solid rgba(244,67,54,0.3)", borderRadius: 6, color: "#e57373", fontSize: 11 }}>{error}</div>}
+              {success && <div style={{ padding: 8, marginBottom: 8, background: "rgba(76,175,80,0.15)", border: "1px solid rgba(76,175,80,0.3)", borderRadius: 6, color: "#81c784", fontSize: 11 }}>{success}</div>}
+
+              {loadingBroadcasts ? (
+                <div style={{ textAlign: "center", padding: 40, color: "#555" }}>
+                  <div style={{ fontSize: 12 }}>Loading broadcasts...</div>
+                </div>
+              ) : broadcasts.length === 0 ? (
+                <div style={{ textAlign: "center", padding: 40, color: "#444" }}>
+                  <Icon name="tv" size={24} color="#444" style={{ marginBottom: 8, opacity: 0.4 }} />
+                  <p style={{ margin: 0, fontSize: 12 }}>No broadcasts yet</p>
+                </div>
+              ) : (
+                <>
+                  {broadcasts.length > 0 && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "rgba(255,255,255,0.02)", borderRadius: 6, marginBottom: 4 }}>
+                      <button
+                        onClick={toggleSelectAll}
+                        style={{
+                          width: 18,
+                          height: 18,
+                          borderRadius: 4,
+                          border: selectedBroadcasts.length === broadcasts.length ? "2px solid #00e5ff" : "2px solid #444",
+                          background: selectedBroadcasts.length === broadcasts.length ? "#00e5ff" : "transparent",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          cursor: "pointer"
+                        }}
+                      >
+                        {selectedBroadcasts.length === broadcasts.length && <Icon name="check" size={12} color="#000" />}
+                      </button>
+                      <span style={{ fontSize: 11, color: "#aaa", fontWeight: 600 }}>Select All</span>
+                    </div>
+                  )}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 400, overflowY: "auto" }}>
+                    {broadcasts.map(broadcast => {
+                      const match = broadcast.matches
+                      const isSelected = selectedBroadcasts.includes(broadcast.id)
+                      return (
+                        <div
+                          key={broadcast.id}
+                          style={{
+                            padding: 10,
+                            background: isSelected ? "rgba(0,229,255,0.08)" : "rgba(255,255,255,0.03)",
+                            border: isSelected ? "1px solid rgba(0,229,255,0.3)" : "1px solid #2a2a4a",
+                            borderRadius: 6,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 10,
+                            cursor: "pointer"
+                          }}
+                          onClick={() => toggleBroadcastSelection(broadcast.id)}
+                        >
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              toggleBroadcastSelection(broadcast.id)
+                            }}
+                            style={{
+                              width: 18,
+                              height: 18,
+                              borderRadius: 4,
+                              border: isSelected ? "2px solid #00e5ff" : "2px solid #444",
+                              background: isSelected ? "#00e5ff" : "transparent",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              cursor: "pointer",
+                              flexShrink: 0
+                            }}
+                          >
+                            {isSelected && <Icon name="check" size={12} color="#000" />}
+                          </button>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 11, color: "#fff", marginBottom: 4, fontWeight: 500 }}>
+                              {broadcast.country} • {broadcast.channel}
+                            </div>
+                            {match && (
+                              <div style={{ fontSize: 10, color: "#888", lineHeight: 1.4 }}>
+                                {match.sport} • {match.league}<br />
+                                {match.home} vs {match.away}<br />
+                                {match.match_date} {match.match_time}
+                              </div>
+                            )}
+                            <div style={{ fontSize: 9, color: "#555", marginTop: 4, fontFamily: "monospace" }}>
+                              Added: {new Date(broadcast.created_at).toLocaleString()}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </>
+              )}
             </div>
           )}
 

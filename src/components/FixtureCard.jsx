@@ -52,13 +52,13 @@ export const FixtureCard = ({ match, user, onVote, onRequestAuth, onAddBroadcast
           <span style={{ fontSize: 9, fontWeight: 700, color: "#fff", background: "#e53935", padding: "1px 5px", borderRadius: 3, letterSpacing: 1, textTransform: "uppercase", fontFamily: "monospace", flexShrink: 0 }}>LIVE</span>
         )}
         {matchStatus === "starting-soon" && (
-          <span style={{ fontSize: 9, fontWeight: 700, color: "#fff", background: "#ff9800", padding: "1px 5px", borderRadius: 3, letterSpacing: 1, textTransform: "uppercase", fontFamily: "monospace", flexShrink: 0 }}>STARTING SOON</span>
+          <span style={{ fontSize: 9, fontWeight: 700, color: "#fff", background: "#7c4dff", padding: "1px 5px", borderRadius: 3, letterSpacing: 1, textTransform: "uppercase", fontFamily: "monospace", flexShrink: 0 }}>STARTING SOON</span>
         )}
         {matchStatus === "finished" && (
           <span style={{ fontSize: 9, fontWeight: 700, color: "#666", background: "rgba(255,255,255,0.08)", padding: "1px 5px", borderRadius: 3, letterSpacing: 1, textTransform: "uppercase", fontFamily: "monospace", flexShrink: 0 }}>FINISHED</span>
         )}
         {matchStatus === "upcoming" && (
-          <span style={{ fontSize: 9, fontWeight: 600, color: "#00e5ff", background: "rgba(0,229,255,0.15)", padding: "1px 5px", borderRadius: 3, letterSpacing: 1, textTransform: "uppercase", fontFamily: "monospace", flexShrink: 0 }}>UPCOMING</span>
+          <span style={{ fontSize: 9, fontWeight: 600, color: "#26a69a", background: "rgba(38,166,154,0.15)", padding: "1px 5px", borderRadius: 3, letterSpacing: 1, textTransform: "uppercase", fontFamily: "monospace", flexShrink: 0 }}>UPCOMING</span>
         )}
       </div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", gap: 8 }}>
@@ -87,7 +87,7 @@ export const FixtureCard = ({ match, user, onVote, onRequestAuth, onAddBroadcast
             <span
               style={{
                 fontSize: 10,
-                color: matchStatus === "live" ? "#4caf50" : matchStatus === "starting-soon" ? "#ff9800" : "#00e5ff",
+                color: matchStatus === "live" ? "#4caf50" : matchStatus === "starting-soon" ? "#7c4dff" : "#26a69a",
                 fontFamily: "monospace",
                 fontWeight: 600
               }}

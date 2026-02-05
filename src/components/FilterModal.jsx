@@ -40,7 +40,14 @@ export const FilterModal = ({ onClose, filters, onApply, allSports, matches }) =
 
   const filteredCountries = getFilteredCountries()
   const filteredEvents = getFilteredEvents()
-  
+
+  // Get sport color for a league
+  const getSportForLeague = (league) => {
+    if (!matches || matches.length === 0) return null
+    const match = matches.find(m => m.league === league)
+    return match ? match.sport : null
+  }
+
   const toggleSport = (sport) => {
     setLocalSports(prev => {
       const newSports = prev.includes(sport) ? prev.filter(s => s !== sport) : [...prev, sport]
@@ -116,8 +123,8 @@ export const FilterModal = ({ onClose, filters, onApply, allSports, matches }) =
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               {[
                 { value: 'live', label: 'LIVE', color: '#e53935' },
-                { value: 'starting-soon', label: 'STARTING SOON', color: '#ff9800' },
-                { value: 'upcoming', label: 'UPCOMING', color: '#00e5ff' },
+                { value: 'starting-soon', label: 'STARTING SOON', color: '#7c4dff' },
+                { value: 'upcoming', label: 'UPCOMING', color: '#26a69a' },
                 { value: 'finished', label: 'FINISHED', color: '#666' }
               ].map(status => {
                 const isSelected = localStatuses.includes(status.value)
@@ -219,6 +226,8 @@ export const FilterModal = ({ onClose, filters, onApply, allSports, matches }) =
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                 {filteredEvents.map(event => {
                   const isSelected = localEvents.includes(event)
+                  const sport = getSportForLeague(event)
+                  const sportColors = sport && SPORT_COLORS[sport] ? SPORT_COLORS[sport] : { accent: "#00e5ff", bg: "rgba(0,229,255,0.15)" }
                   return (
                     <button
                       key={event}
@@ -226,9 +235,9 @@ export const FilterModal = ({ onClose, filters, onApply, allSports, matches }) =
                       style={{
                         padding: "5px 10px",
                         borderRadius: 6,
-                        border: `1px solid ${isSelected ? "#00e5ff" : "#2a2a4a"}`,
-                        background: isSelected ? "rgba(0,229,255,0.15)" : "#111122",
-                        color: isSelected ? "#00e5ff" : "#888",
+                        border: `1px solid ${isSelected ? sportColors.accent : "#2a2a4a"}`,
+                        background: isSelected ? sportColors.bg : "#111122",
+                        color: isSelected ? sportColors.accent : "#888",
                         fontSize: 11,
                         cursor: "pointer"
                       }}
