@@ -5,7 +5,7 @@ import { SPORT_COLORS } from '../config/constants'
 import { useUserPreferences } from '../hooks/useUserPreferences'
 import { getTimezoneAbbreviation } from '../utils/timeFormatting'
 
-export const FixtureCard = ({ match, user, onVote, onRequestAuth, onAddBroadcast, onDeleteBroadcast }) => {
+export const FixtureCard = ({ match, user, onVote, onRequestAuth, onAddBroadcast, onDeleteBroadcast, isAdmin }) => {
   const [expanded, setExpanded] = useState(false)
   const [relativeTime, setRelativeTime] = useState('')
   const col = SPORT_COLORS[match.sport] || { accent: "#00e5ff", bg: "rgba(0,229,255,0.12)", glow: "rgba(0,229,255,0.25)" }
@@ -134,6 +134,7 @@ export const FixtureCard = ({ match, user, onVote, onRequestAuth, onAddBroadcast
                     onVote={onVote}
                     onRequestAuth={onRequestAuth}
                     onDelete={onDeleteBroadcast}
+                    isAdmin={isAdmin}
                   />
                 ))}
               </div>

@@ -2,13 +2,16 @@ import React from 'react'
 import { Icon } from './Icon'
 import { getFlag } from '../utils/helpers'
 
-export const BroadcastPill = ({ broadcast, voteStats, user, onVote, onRequestAuth, onDelete }) => {
+export const BroadcastPill = ({ broadcast, voteStats, user, onVote, onRequestAuth, onDelete, isAdmin }) => {
   const upCount = voteStats.up || 0
   const downCount = voteStats.down || 0
   const myVote = voteStats.myVote
 
   // Check if current user is the creator
   const isCreator = user && broadcast.created_by_uuid === user.id
+
+  // Can delete if user is creator or admin
+  const canDelete = isCreator || isAdmin
 
   // Determine source type and styling
   const isAutomatic = broadcast.source && broadcast.source !== 'user'
@@ -63,14 +66,15 @@ export const BroadcastPill = ({ broadcast, voteStats, user, onVote, onRequestAut
       <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
         {isCreator ? (
           <>
-            {/* Creator sees their locked vote and delete button */}
+            {/* Creator sees their locked upvote and downvote count (non-interactive) */}
             <div style={{ display: "flex", alignItems: "center", gap: 3, background: "rgba(76,175,80,0.2)", border: "1px solid rgba(76,175,80,0.5)", borderRadius: 4, padding: "2px 6px", color: "#81c784", opacity: 0.7 }}>
               <Icon name="thumbUp" size={11} />
               <span style={{ fontSize: 11, fontFamily: "monospace" }}>{upCount}</span>
             </div>
-            <button onClick={handleDelete} style={{ display: "flex", alignItems: "center", gap: 3, background: "rgba(244,67,54,0.15)", border: "1px solid rgba(244,67,54,0.4)", borderRadius: 4, padding: "2px 6px", cursor: "pointer", color: "#e57373" }} title="Delete this broadcast">
-              <Icon name="x" size={11} />
-            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: 3, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 4, padding: "2px 6px", color: "#555", opacity: 0.5 }}>
+              <Icon name="thumbDown" size={11} />
+              <span style={{ fontSize: 11, fontFamily: "monospace" }}>{downCount}</span>
+            </div>
           </>
         ) : (
           <>
@@ -84,6 +88,12 @@ export const BroadcastPill = ({ broadcast, voteStats, user, onVote, onRequestAut
               <span style={{ fontSize: 11, fontFamily: "monospace" }}>{downCount}</span>
             </button>
           </>
+        )}
+        {/* Delete button for creators or admins */}
+        {canDelete && (
+          <button onClick={handleDelete} style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(244,67,54,0.15)", border: "1px solid rgba(244,67,54,0.4)", borderRadius: 4, padding: "2px 6px", cursor: "pointer", color: "#e57373", minWidth: 28 }} title="Delete this broadcast">
+            <Icon name="x" size={11} />
+          </button>
         )}
       </div>
     </div>

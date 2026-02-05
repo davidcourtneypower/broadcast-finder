@@ -210,15 +210,6 @@ function App() {
                 if (user && (payload.old.user_id_uuid === user.id || payload.old.user_id === user.id)) {
                   myVote = null
                 }
-              } else if (payload.eventType === 'UPDATE') {
-                // Vote changed
-                if (payload.old.vote_type === 'up') up--
-                else if (payload.old.vote_type === 'down') down--
-                if (payload.new.vote_type === 'up') up++
-                else if (payload.new.vote_type === 'down') down++
-                if (user && (payload.new.user_id_uuid === user.id || payload.new.user_id === user.id)) {
-                  myVote = payload.new.vote_type
-                }
               }
 
               return {
@@ -301,14 +292,28 @@ function App() {
 
           dbError = error
         } else {
-          // Change vote: update existing vote
-          const { error } = await supabase
+          // Change vote: delete old and insert new (avoids UPDATE event issues with replica identity)
+          const { error: deleteError } = await supabase
             .from("votes")
-            .update({ vote_type: voteType })
+            .delete()
             .eq("broadcast_id", broadcastId)
             .eq("user_id_uuid", user.id)
 
-          dbError = error
+          if (deleteError) {
+            console.error('Error deleting old vote:', deleteError)
+            return
+          }
+
+          const { error: insertError } = await supabase
+            .from("votes")
+            .insert([{
+              broadcast_id: broadcastId,
+              user_id_uuid: user.id,
+              user_id: user.id, // Keep legacy field for compatibility
+              vote_type: voteType
+            }])
+
+          dbError = insertError
         }
       } else {
         // New vote: insert
@@ -342,11 +347,18 @@ function App() {
 
     try {
       // Delete the broadcast (votes will be cascade deleted if FK constraint exists)
-      const { error } = await supabase
+      // Admins can delete any broadcast, regular users can only delete their own
+      let query = supabase
         .from("broadcasts")
         .delete()
         .eq("id", broadcastId)
-        .eq("created_by_uuid", user.id) // Only allow deleting own broadcasts
+
+      // Non-admins can only delete their own broadcasts
+      if (!isAdmin) {
+        query = query.eq("created_by_uuid", user.id)
+      }
+
+      const { error } = await query
 
       if (error) {
         console.error('Error deleting broadcast:', error)
@@ -651,6 +663,7 @@ function App() {
                   onRequestAuth={() => setShowAuth(true)}
                   onAddBroadcast={openAddBroadcast}
                   onDeleteBroadcast={handleDeleteBroadcast}
+                  isAdmin={isAdmin}
                 />
               ))}
             </div>
