@@ -7,10 +7,27 @@ export const AddBroadcastModal = ({ onClose, match, onAdd, user }) => {
   const [selectedCountry, setSelectedCountry] = useState("")
   const [selectedChannel, setSelectedChannel] = useState("")
   const [adding, setAdding] = useState(false)
-  const availableChannels = selectedCountry ? CHANNELS_BY_COUNTRY[selectedCountry] : []
-  
+
+  // Get existing broadcasts for this match to prevent duplicates
+  const existingBroadcasts = match.broadcasts || []
+
+  // Filter channels: exclude ones already added for the selected country
+  const availableChannels = selectedCountry
+    ? CHANNELS_BY_COUNTRY[selectedCountry].filter(channel => {
+        // Check if this country + channel combination already exists
+        const isDuplicate = existingBroadcasts.some(
+          b => b.country === selectedCountry && b.channel === channel
+        )
+        return !isDuplicate
+      })
+    : []
+
+  // Check if the selected combination is a duplicate
+  const isDuplicate = selectedCountry && selectedChannel &&
+    existingBroadcasts.some(b => b.country === selectedCountry && b.channel === selectedChannel)
+
   const handleAdd = async () => {
-    if (!selectedCountry || !selectedChannel) return
+    if (!selectedCountry || !selectedChannel || isDuplicate) return
     setAdding(true)
     await onAdd(match.id, selectedCountry, selectedChannel)
     setAdding(false)
@@ -38,13 +55,19 @@ export const AddBroadcastModal = ({ onClose, match, onAdd, user }) => {
         {selectedCountry && (
           <div style={{ marginBottom: 16 }}>
             <label style={{ color: "#aaa", fontSize: 11, fontFamily: "monospace", textTransform: "uppercase", letterSpacing: 1, display: "block", marginBottom: 6 }}>Channel/Service</label>
-            <select value={selectedChannel} onChange={(e) => setSelectedChannel(e.target.value)} style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid #2a2a4a", background: "#111122", color: "#fff", fontSize: 13, outline: "none" }}>
-              <option value="">Select channel...</option>
-              {availableChannels.map(ch => <option key={ch} value={ch}>{ch}</option>)}
-            </select>
+            {availableChannels.length === 0 ? (
+              <div style={{ padding: "12px", background: "rgba(255,193,7,0.1)", border: "1px solid rgba(255,193,7,0.3)", borderRadius: 8, color: "#ffb300", fontSize: 12 }}>
+                All channels for {selectedCountry} have already been added to this fixture.
+              </div>
+            ) : (
+              <select value={selectedChannel} onChange={(e) => setSelectedChannel(e.target.value)} style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid #2a2a4a", background: "#111122", color: "#fff", fontSize: 13, outline: "none" }}>
+                <option value="">Select channel...</option>
+                {availableChannels.map(ch => <option key={ch} value={ch}>{ch}</option>)}
+              </select>
+            )}
           </div>
         )}
-        <button onClick={handleAdd} disabled={!selectedCountry || !selectedChannel || adding} style={{ width: "100%", padding: "10px 0", borderRadius: 8, border: "none", background: selectedCountry && selectedChannel && !adding ? "linear-gradient(135deg,#00e5ff,#7c4dff)" : "#2a2a4a", color: "#fff", fontSize: 14, fontWeight: 600, cursor: selectedCountry && selectedChannel && !adding ? "pointer" : "not-allowed" }}>
+        <button onClick={handleAdd} disabled={!selectedCountry || !selectedChannel || adding || isDuplicate || availableChannels.length === 0} style={{ width: "100%", padding: "10px 0", borderRadius: 8, border: "none", background: selectedCountry && selectedChannel && !adding && !isDuplicate ? "linear-gradient(135deg,#00e5ff,#7c4dff)" : "#2a2a4a", color: "#fff", fontSize: 14, fontWeight: 600, cursor: selectedCountry && selectedChannel && !adding && !isDuplicate ? "pointer" : "not-allowed" }}>
           {adding ? "Adding..." : "Add Broadcast"}
         </button>
       </div>

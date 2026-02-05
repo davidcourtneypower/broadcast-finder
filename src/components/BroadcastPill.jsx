@@ -38,40 +38,44 @@ export const BroadcastPill = ({ broadcast, voteStats, user, onVote, onRequestAut
   }
 
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, background: "rgba(255,255,255,0.04)", borderRadius: 6, padding: "6px 10px", border: "1px solid rgba(255,255,255,0.08)" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, minWidth: 0 }}>
-        <span style={{ fontSize: 13, flexShrink: 0 }}>{getFlag(broadcast.country)}</span>
-        <div style={{ display: "flex", flexDirection: "column", gap: 2, flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <span style={{ color: "#ccc", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{broadcast.channel}</span>
-            <span
-              style={{
-                fontSize: 8,
-                fontFamily: "monospace",
-                color: sourceColor,
-                background: sourceBg,
-                padding: "1px 4px",
-                borderRadius: 3,
-                fontWeight: 600,
-                letterSpacing: 0.3,
-                flexShrink: 0
-              }}
-              title={isAutomatic ? `Auto-scraped from ${broadcast.source}` : 'User contributed'}
-            >
-              {sourceLabel}
-            </span>
-          </div>
-        </div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, background: "rgba(255,255,255,0.04)", borderRadius: 6, padding: "8px 10px", border: "1px solid rgba(255,255,255,0.08)" }}>
+      {/* Row 1: Country flag and name */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <span style={{ fontSize: 15, flexShrink: 0 }}>{getFlag(broadcast.country)}</span>
+        <span style={{ color: "#aaa", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>{broadcast.country}</span>
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+
+      {/* Row 2: Channel/Service name and source badge */}
+      <div style={{ display: "flex", alignItems: "center", gap: 4, paddingLeft: 21 }}>
+        <span style={{ color: "#fff", fontSize: 13, fontWeight: 500 }}>{broadcast.channel}</span>
+        <span
+          style={{
+            fontSize: 8,
+            fontFamily: "monospace",
+            color: sourceColor,
+            background: sourceBg,
+            padding: "1px 4px",
+            borderRadius: 3,
+            fontWeight: 600,
+            letterSpacing: 0.3,
+            flexShrink: 0
+          }}
+          title={isAutomatic ? `Auto-scraped from ${broadcast.source}` : 'User contributed'}
+        >
+          {sourceLabel}
+        </span>
+      </div>
+
+      {/* Row 3: Vote buttons and delete button */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, paddingLeft: 21 }}>
         {isCreator ? (
           <>
             {/* Creator sees their locked upvote and downvote count (non-interactive) */}
-            <div style={{ display: "flex", alignItems: "center", gap: 3, background: "rgba(76,175,80,0.2)", border: "1px solid rgba(76,175,80,0.5)", borderRadius: 4, padding: "2px 6px", color: "#81c784", opacity: 0.7 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 3, background: "rgba(76,175,80,0.2)", border: "1px solid rgba(76,175,80,0.5)", borderRadius: 4, padding: "3px 7px", color: "#81c784", opacity: 0.7 }}>
               <Icon name="thumbUp" size={11} />
               <span style={{ fontSize: 11, fontFamily: "monospace" }}>{upCount}</span>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 3, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 4, padding: "2px 6px", color: "#555", opacity: 0.5 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 3, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 4, padding: "3px 7px", color: "#555", opacity: 0.5 }}>
               <Icon name="thumbDown" size={11} />
               <span style={{ fontSize: 11, fontFamily: "monospace" }}>{downCount}</span>
             </div>
@@ -79,11 +83,11 @@ export const BroadcastPill = ({ broadcast, voteStats, user, onVote, onRequestAut
         ) : (
           <>
             {/* Non-creators can vote */}
-            <button onClick={() => handleVote("up")} style={{ display: "flex", alignItems: "center", gap: 3, background: myVote === "up" ? "rgba(76,175,80,0.2)" : "rgba(255,255,255,0.03)", border: myVote === "up" ? "1px solid rgba(76,175,80,0.5)" : "1px solid rgba(255,255,255,0.08)", borderRadius: 4, padding: "2px 6px", cursor: "pointer", color: myVote === "up" ? "#81c784" : "#777" }}>
+            <button onClick={() => handleVote("up")} style={{ display: "flex", alignItems: "center", gap: 3, background: myVote === "up" ? "rgba(76,175,80,0.2)" : "rgba(255,255,255,0.03)", border: myVote === "up" ? "1px solid rgba(76,175,80,0.5)" : "1px solid rgba(255,255,255,0.08)", borderRadius: 4, padding: "3px 7px", cursor: "pointer", color: myVote === "up" ? "#81c784" : "#777" }}>
               <Icon name="thumbUp" size={11} />
               <span style={{ fontSize: 11, fontFamily: "monospace" }}>{upCount}</span>
             </button>
-            <button onClick={() => handleVote("down")} style={{ display: "flex", alignItems: "center", gap: 3, background: myVote === "down" ? "rgba(244,67,54,0.2)" : "rgba(255,255,255,0.03)", border: myVote === "down" ? "1px solid rgba(244,67,54,0.5)" : "1px solid rgba(255,255,255,0.08)", borderRadius: 4, padding: "2px 6px", cursor: "pointer", color: myVote === "down" ? "#e57373" : "#777" }}>
+            <button onClick={() => handleVote("down")} style={{ display: "flex", alignItems: "center", gap: 3, background: myVote === "down" ? "rgba(244,67,54,0.2)" : "rgba(255,255,255,0.03)", border: myVote === "down" ? "1px solid rgba(244,67,54,0.5)" : "1px solid rgba(255,255,255,0.08)", borderRadius: 4, padding: "3px 7px", cursor: "pointer", color: myVote === "down" ? "#e57373" : "#777" }}>
               <Icon name="thumbDown" size={11} />
               <span style={{ fontSize: 11, fontFamily: "monospace" }}>{downCount}</span>
             </button>
@@ -91,7 +95,7 @@ export const BroadcastPill = ({ broadcast, voteStats, user, onVote, onRequestAut
         )}
         {/* Delete button for creators or admins */}
         {canDelete && (
-          <button onClick={handleDelete} style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(244,67,54,0.15)", border: "1px solid rgba(244,67,54,0.4)", borderRadius: 4, padding: "2px 6px", cursor: "pointer", color: "#e57373", minWidth: 28 }} title="Delete this broadcast">
+          <button onClick={handleDelete} style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(244,67,54,0.15)", border: "1px solid rgba(244,67,54,0.4)", borderRadius: 4, padding: "3px 7px", cursor: "pointer", color: "#e57373", minWidth: 30 }} title="Delete this broadcast">
             <Icon name="x" size={11} />
           </button>
         )}
