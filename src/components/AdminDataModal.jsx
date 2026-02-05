@@ -20,9 +20,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
   const [selectedBroadcasts, setSelectedBroadcasts] = useState([])
   const [deletingBroadcasts, setDeletingBroadcasts] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [searchUsername, setSearchUsername] = useState("")
-  const [searchFixture, setSearchFixture] = useState("")
-  const [searchLeague, setSearchLeague] = useState("")
+  const [searchBroadcast, setSearchBroadcast] = useState("")
   const [users, setUsers] = useState([])
   const [loadingUsers, setLoadingUsers] = useState(false)
   const [bannedUsers, setBannedUsers] = useState([])
@@ -478,28 +476,30 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
 
   const getFilteredBroadcasts = () => {
     return broadcasts.filter(broadcast => {
-      // Username filter
-      if (searchUsername) {
-        const username = broadcast.created_by || ''
-        if (!username.toLowerCase().includes(searchUsername.toLowerCase())) {
-          return false
-        }
-      }
+      // Single unified search across username, fixture, and league
+      if (searchBroadcast) {
+        const searchTerm = searchBroadcast.toLowerCase()
+        const username = (broadcast.created_by || '').toLowerCase()
+        const match = broadcast.matches
 
-      // Fixture filter (home vs away teams)
-      if (searchFixture && broadcast.matches) {
-        const fixture = `${broadcast.matches.home} ${broadcast.matches.away}`.toLowerCase()
-        if (!fixture.includes(searchFixture.toLowerCase())) {
-          return false
-        }
-      }
+        // Check username
+        if (username.includes(searchTerm)) return true
 
-      // League filter
-      if (searchLeague && broadcast.matches) {
-        const league = broadcast.matches.league || ''
-        if (!league.toLowerCase().includes(searchLeague.toLowerCase())) {
-          return false
+        // Check fixture (home vs away teams)
+        if (match) {
+          const fixture = `${match.home} ${match.away}`.toLowerCase()
+          if (fixture.includes(searchTerm)) return true
+
+          // Check league
+          const league = (match.league || '').toLowerCase()
+          if (league.includes(searchTerm)) return true
         }
+
+        // Check channel/country
+        if ((broadcast.channel || '').toLowerCase().includes(searchTerm)) return true
+        if ((broadcast.country || '').toLowerCase().includes(searchTerm)) return true
+
+        return false
       }
 
       return true
@@ -508,6 +508,11 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
 
   const getFilteredUsers = () => {
     return users.filter(user => {
+      // Filter out users with unknown email (no broadcasts)
+      if (!user.email || user.email === 'Unknown') {
+        return false
+      }
+
       // Filter out current admin
       if (currentUserEmail && user.email === currentUserEmail) {
         return false
@@ -793,65 +798,25 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
                   </div>
                 </div>
 
-                {/* Search filters */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
-                  <div style={{ position: "relative" }}>
-                    <Icon name="search" size={10} color="#555" style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
-                    <input
-                      value={searchUsername}
-                      onChange={(e) => setSearchUsername(e.target.value)}
-                      placeholder="Username..."
-                      style={{
-                        width: "100%",
-                        padding: "5px 8px 5px 24px",
-                        borderRadius: 6,
-                        border: "1px solid #2a2a4a",
-                        background: "#111122",
-                        color: "#fff",
-                        fontSize: 10,
-                        outline: "none",
-                        boxSizing: "border-box"
-                      }}
-                    />
-                  </div>
-                  <div style={{ position: "relative" }}>
-                    <Icon name="search" size={10} color="#555" style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
-                    <input
-                      value={searchFixture}
-                      onChange={(e) => setSearchFixture(e.target.value)}
-                      placeholder="Fixture..."
-                      style={{
-                        width: "100%",
-                        padding: "5px 8px 5px 24px",
-                        borderRadius: 6,
-                        border: "1px solid #2a2a4a",
-                        background: "#111122",
-                        color: "#fff",
-                        fontSize: 10,
-                        outline: "none",
-                        boxSizing: "border-box"
-                      }}
-                    />
-                  </div>
-                  <div style={{ position: "relative" }}>
-                    <Icon name="search" size={10} color="#555" style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
-                    <input
-                      value={searchLeague}
-                      onChange={(e) => setSearchLeague(e.target.value)}
-                      placeholder="League..."
-                      style={{
-                        width: "100%",
-                        padding: "5px 8px 5px 24px",
-                        borderRadius: 6,
-                        border: "1px solid #2a2a4a",
-                        background: "#111122",
-                        color: "#fff",
-                        fontSize: 10,
-                        outline: "none",
-                        boxSizing: "border-box"
-                      }}
-                    />
-                  </div>
+                {/* Unified search */}
+                <div style={{ position: "relative" }}>
+                  <Icon name="search" size={12} color="#555" style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+                  <input
+                    value={searchBroadcast}
+                    onChange={(e) => setSearchBroadcast(e.target.value)}
+                    placeholder="Search by username, fixture, league, channel, or country..."
+                    style={{
+                      width: "100%",
+                      padding: "6px 10px 6px 30px",
+                      borderRadius: 6,
+                      border: "1px solid #2a2a4a",
+                      background: "#111122",
+                      color: "#fff",
+                      fontSize: 11,
+                      outline: "none",
+                      boxSizing: "border-box"
+                    }}
+                  />
                 </div>
               </div>
 

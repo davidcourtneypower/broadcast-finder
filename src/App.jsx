@@ -127,9 +127,7 @@ function App() {
   
   // Set up real-time subscriptions for broadcasts and votes
   useEffect(() => {
-    if (!user) return
-
-    // Subscribe to broadcasts changes
+    // Subscribe to broadcasts changes (works for logged in and logged out users)
     const broadcastsChannel = supabase
       .channel('broadcasts-changes')
       .on('postgres_changes',
@@ -147,7 +145,7 @@ function App() {
               .select('*')
               .eq('broadcast_id', newBroadcast.id)
 
-            // Calculate vote stats
+            // Calculate vote stats (check user only if logged in)
             const voteStats = { up: 0, down: 0, myVote: null }
             votes?.forEach(v => {
               if (v.vote_type === 'up') voteStats.up++
@@ -181,7 +179,7 @@ function App() {
       )
       .subscribe()
 
-    // Subscribe to votes changes
+    // Subscribe to votes changes (works for logged in and logged out users)
     const votesChannel = supabase
       .channel('votes-changes')
       .on('postgres_changes',
@@ -199,7 +197,7 @@ function App() {
             .select('*')
             .eq('broadcast_id', broadcastId)
 
-          // Recalculate vote stats from scratch
+          // Recalculate vote stats from scratch (check user only if logged in)
           const voteStats = { up: 0, down: 0, myVote: null }
           votes?.forEach(v => {
             if (v.vote_type === 'up') voteStats.up++
