@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { supabase } from './config/supabase'
 import { useAuth } from './hooks/useAuth'
 import { getTodayStr, getTomorrowStr } from './utils/helpers'
+import { useUserPreferences } from './hooks/useUserPreferences'
 import { DATE_TABS } from './config/constants'
 import { Icon } from './components/Icon'
 import { FixtureCard } from './components/FixtureCard'
@@ -15,6 +16,7 @@ import { useReferenceData } from './hooks/useReferenceData'
 function App() {
   const { user, loading: authLoading, signInWithGoogle, signOut } = useAuth()
   const { getSportConfig, getSportColors, getFlag, getCountryNames, getChannelsForCountry } = useReferenceData()
+  const { formatTime, getStatus: getUserStatus, getRelative, preferences, loading: prefsLoading } = useUserPreferences(user)
   const [isAdmin, setIsAdmin] = useState(false)
   const [showAuth, setShowAuth] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
@@ -699,7 +701,7 @@ function App() {
       
       {/* Content */}
       <div style={{ padding: "10px 12px 24px", flex: "1 0 auto" }}>
-        {loading ? (
+        {(loading || prefsLoading) ? (
           <div style={{ textAlign: "center", padding: "60px 20px", color: "#555" }}>
             {/* Loading Spinner */}
             <div style={{
@@ -747,6 +749,10 @@ function App() {
                   isAdmin={isAdmin}
                   getSportColors={getSportColors}
                   getFlag={getFlag}
+                  formatTime={formatTime}
+                  getStatus={getUserStatus}
+                  getRelative={getRelative}
+                  preferences={preferences}
                 />
               ))}
             </div>
