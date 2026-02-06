@@ -36,6 +36,8 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
   const [logTypeFilter, setLogTypeFilter] = useState("all")
   const [importType, setImportType] = useState(null) // 'fixtures', 'broadcasts', 'legacy', or null
   const [importPreview, setImportPreview] = useState(null)
+  const [cleaningUp, setCleaningUp] = useState(false)
+  const [cleanupResult, setCleanupResult] = useState(null)
 
   // Detect and preview import data
   const detectImportType = (jsonString) => {
@@ -342,6 +344,46 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
       setError("Error: " + e.message)
     }
     setFetching(false)
+  }
+
+  const handleCleanup = async () => {
+    setCleaningUp(true)
+    setError("")
+    setSuccess("")
+    setCleanupResult(null)
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/cleanup-old-data`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({})
+      })
+
+      const result = await response.json()
+      setCleanupResult(result)
+
+      if (result.success) {
+        const { matches, broadcasts, votes } = result.deleted
+        if (matches === 0) {
+          setSuccess('No old data to clean up')
+        } else {
+          setSuccess(`Cleaned up ${matches} match${matches !== 1 ? 'es' : ''}, ${broadcasts} broadcast${broadcasts !== 1 ? 's' : ''}, ${votes} vote${votes !== 1 ? 's' : ''}`)
+          setTimeout(() => { onUpdate() }, 1000)
+        }
+      } else {
+        setError('Cleanup failed: ' + (result.error || 'Unknown error'))
+      }
+    } catch (e) {
+      setError('Error: ' + e.message)
+    }
+    setCleaningUp(false)
   }
 
   const loadLogs = async () => {
@@ -689,6 +731,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
     setSuccess("")
     setFetchResult(null)
     setBroadcastResult(null)
+    setCleanupResult(null)
     setImportType(null)
     setImportPreview(null)
     setJsonData("")
@@ -900,7 +943,7 @@ Example broadcasts:
               <div>
                 <div style={{ fontSize: 12, color: "#aaa", marginBottom: 8, fontWeight: 600 }}>Select Dates</div>
                 <div style={{ display: "flex", gap: 8 }}>
-                  {['today', 'tomorrow'].map(date => {
+                  {['today', 'tomorrow', 'day_after_tomorrow'].map(date => {
                     const selected = selectedDates.includes(date)
                     return (
                       <button
@@ -934,7 +977,7 @@ Example broadcasts:
                         }}>
                           {selected && <Icon name="check" size={10} color="#000" />}
                         </div>
-                        {date.charAt(0).toUpperCase() + date.slice(1)}
+                        {date === 'day_after_tomorrow' ? 'Day After' : date.charAt(0).toUpperCase() + date.slice(1)}
                       </button>
                     )
                   })}
@@ -1053,6 +1096,45 @@ Example broadcasts:
               >
                 {fetching ? "Fetching..." : `Fetch All Sports${fetchBroadcastsToo ? ' + Broadcasts' : ''}`}
               </button>
+
+              {/* Cleanup section */}
+              <div style={{ borderTop: "1px solid #2a2a4a", paddingTop: 16 }}>
+                <div style={{ fontSize: 11, color: "#888", marginBottom: 10, lineHeight: 1.5 }}>
+                  Remove all fixtures, broadcasts, and votes for past matches (before today).
+                </div>
+
+                {cleanupResult && cleanupResult.success && cleanupResult.deleted?.matches > 0 && (
+                  <div style={{
+                    padding: 12,
+                    marginBottom: 10,
+                    background: "rgba(76,175,80,0.15)",
+                    border: "1px solid rgba(76,175,80,0.3)",
+                    borderRadius: 8
+                  }}>
+                    <div style={{ fontSize: 11, color: "#81c784", lineHeight: 1.6 }}>
+                      Deleted: {cleanupResult.deleted.matches} matches, {cleanupResult.deleted.broadcasts} broadcasts, {cleanupResult.deleted.votes} votes
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  onClick={handleCleanup}
+                  disabled={cleaningUp}
+                  style={{
+                    width: "100%",
+                    padding: "10px 0",
+                    borderRadius: 8,
+                    border: "1px solid rgba(244,67,54,0.4)",
+                    background: !cleaningUp ? "rgba(244,67,54,0.15)" : "#2a2a4a",
+                    color: !cleaningUp ? "#e57373" : "#666",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: !cleaningUp ? "pointer" : "not-allowed"
+                  }}
+                >
+                  {cleaningUp ? "Cleaning up..." : "Cleanup Old Data"}
+                </button>
+              </div>
             </div>
           )}
 
