@@ -74,41 +74,6 @@ function normalizeCountry(country: string): string {
   return COUNTRY_NORMALIZATIONS[normalized] || country;
 }
 
-/**
- * Parse TV stations string which may contain multiple channels
- * Format can be: "ESPN, Fox Sports" or "ESPN (USA), Sky Sports (UK)"
- */
-function parseTVStations(
-  tvStation: string | null,
-  defaultCountry: string
-): Array<{ channel: string; country: string }> {
-  if (!tvStation) return [];
-
-  const results: Array<{ channel: string; country: string }> = [];
-  const stations = tvStation.split(',').map(s => s.trim()).filter(Boolean);
-
-  for (const station of stations) {
-    // Check if station has country in parentheses: "ESPN (USA)"
-    const match = station.match(/^(.+?)\s*\(([^)]+)\)$/);
-
-    if (match) {
-      const channel = match[1].trim();
-      const country = normalizeCountry(match[2].trim());
-      if (channel) {
-        results.push({ channel, country });
-      }
-    } else {
-      // No country specified, use default
-      const channel = station.trim();
-      if (channel) {
-        results.push({ channel, country: normalizeCountry(defaultCountry) });
-      }
-    }
-  }
-
-  return results;
-}
-
 serve(async (req) => {
   const startTime = Date.now();
 
@@ -143,6 +108,27 @@ serve(async (req) => {
       .filter(Boolean);
 
     console.log(`Starting broadcast fetch for dates: ${datesToFetch.join(', ')}, trigger: ${trigger}`);
+
+    // Log sample sportsdb_event_ids from matches table for debugging
+    const { data: sampleMatches } = await supabase
+      .from('matches')
+      .select('sportsdb_event_id, home, away')
+      .not('sportsdb_event_id', 'is', null)
+      .limit(5);
+
+    if (sampleMatches && sampleMatches.length > 0) {
+      const sampleDbIds = sampleMatches.map(m => m.sportsdb_event_id).join(', ');
+      console.log(`Sample DB sportsdb_event_ids: ${sampleDbIds}`);
+      console.log(`Sample matches: ${sampleMatches.map(m => `${m.home} vs ${m.away}`).join(', ')}`);
+    } else {
+      console.warn('NO matches found with sportsdb_event_id populated!');
+
+      // Check if there are any matches at all
+      const { count } = await supabase
+        .from('matches')
+        .select('*', { count: 'exact', head: true });
+      console.log(`Total matches in DB: ${count}`);
+    }
 
     // Track statistics
     let totalTVEventsFound = 0;
@@ -206,10 +192,11 @@ serve(async (req) => {
           const match = matches[0];
           totalMatched++;
 
-          // Parse TV stations
-          const stations = parseTVStations(tvEvent.strTVStation, tvEvent.strCountry || 'Global');
+          // API returns strChannel (one channel per entry), not strTVStation
+          const channel = tvEvent.strChannel;
+          const country = normalizeCountry(tvEvent.strCountry || 'Global');
 
-          for (const { channel, country } of stations) {
+          if (channel) {
             allBroadcasts.push({
               match_id: match.id,
               country,
