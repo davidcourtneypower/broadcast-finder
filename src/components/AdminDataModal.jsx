@@ -23,12 +23,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
   const [showDeleteFixturesConfirm, setShowDeleteFixturesConfirm] = useState(false)
   const [searchFixture, setSearchFixture] = useState("")
   const [sportFilter, setSportFilter] = useState("all")
-  const [broadcasts, setBroadcasts] = useState([])
-  const [loadingBroadcasts, setLoadingBroadcasts] = useState(false)
-  const [selectedBroadcasts, setSelectedBroadcasts] = useState([])
-  const [deletingBroadcasts, setDeletingBroadcasts] = useState(false)
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [searchBroadcast, setSearchBroadcast] = useState("")
+  const [expandedFixture, setExpandedFixture] = useState(null)
   const [users, setUsers] = useState([])
   const [loadingUsers, setLoadingUsers] = useState(false)
   const [bannedUsers, setBannedUsers] = useState([])
@@ -391,39 +386,23 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
     setLoadingLogs(false)
   }
 
-  const loadBroadcasts = async () => {
-    setLoadingBroadcasts(true)
-    try {
-      const { data, error } = await supabase
-        .from('broadcasts')
-        .select(`
-          *,
-          matches:match_id (
-            home,
-            away,
-            league,
-            sport,
-            match_date,
-            match_time
-          )
-        `)
-        .order('created_at', { ascending: false })
-        .limit(200)
-
-      if (error) throw error
-      setBroadcasts(data || [])
-    } catch (e) {
-      console.error('Error loading broadcasts:', e)
-    }
-    setLoadingBroadcasts(false)
-  }
-
   const loadFixtures = async () => {
     setLoadingFixtures(true)
     try {
+      // Fetch fixtures with their broadcasts
       const { data, error } = await supabase
         .from('matches')
-        .select('*')
+        .select(`
+          *,
+          broadcasts (
+            id,
+            channel,
+            country,
+            source,
+            created_by,
+            created_at
+          )
+        `)
         .order('match_date', { ascending: false })
         .limit(500)
 
@@ -433,6 +412,10 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
       console.error('Error loading fixtures:', e)
     }
     setLoadingFixtures(false)
+  }
+
+  const toggleFixtureExpand = (fixtureId) => {
+    setExpandedFixture(prev => prev === fixtureId ? null : fixtureId)
   }
 
   const toggleFixtureSelection = (fixtureId) => {
@@ -516,63 +499,6 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
 
   const getUniqueSports = () => {
     return [...new Set(fixtures.map(f => f.sport))].sort()
-  }
-
-  const toggleBroadcastSelection = (broadcastId) => {
-    setSelectedBroadcasts(prev =>
-      prev.includes(broadcastId)
-        ? prev.filter(id => id !== broadcastId)
-        : [...prev, broadcastId]
-    )
-  }
-
-  const toggleSelectAll = () => {
-    const filteredBroadcasts = getFilteredBroadcasts()
-    if (selectedBroadcasts.length === filteredBroadcasts.length) {
-      setSelectedBroadcasts([])
-    } else {
-      setSelectedBroadcasts(filteredBroadcasts.map(b => b.id))
-    }
-  }
-
-  const confirmBulkDelete = () => {
-    if (selectedBroadcasts.length === 0) return
-    setShowDeleteConfirm(true)
-  }
-
-  const handleBulkDelete = async () => {
-    if (selectedBroadcasts.length === 0) return
-
-    setDeletingBroadcasts(true)
-    try {
-      // Get broadcast details before deletion for logging
-      const deletedBroadcasts = broadcasts.filter(b => selectedBroadcasts.includes(b.id))
-
-      const { error } = await supabase
-        .from('broadcasts')
-        .delete()
-        .in('id', selectedBroadcasts)
-
-      if (error) throw error
-
-      // Log the bulk deletion
-      await logAdminAction('broadcasts_deleted', {
-        extraData: {
-          deleted_count: selectedBroadcasts.length,
-          broadcast_ids: selectedBroadcasts
-        }
-      })
-
-      setSuccess(`Successfully deleted ${selectedBroadcasts.length} broadcast${selectedBroadcasts.length > 1 ? 's' : ''}`)
-      setSelectedBroadcasts([])
-      await loadBroadcasts()
-      setTimeout(() => setSuccess(""), 3000)
-    } catch (e) {
-      setError('Error deleting broadcasts: ' + e.message)
-      setTimeout(() => setError(""), 3000)
-    }
-    setDeletingBroadcasts(false)
-    setShowDeleteConfirm(false)
   }
 
   const loadUsers = async () => {
@@ -741,13 +667,10 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
     setImportPreview(null)
     setJsonData("")
     setSelectedFixtures([])
-    setSelectedBroadcasts([])
 
     // Load data for specific tabs
     if (activeTab === 'logs') {
       loadLogs()
-    } else if (activeTab === 'broadcasts') {
-      loadBroadcasts()
     } else if (activeTab === 'users') {
       loadUsers()
     } else if (activeTab === 'fixtures') {
@@ -779,38 +702,6 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
     if (status === 'success') return 'rgba(76,175,80,0.3)'
     if (status === 'partial') return 'rgba(255,152,0,0.3)'
     return 'rgba(244,67,54,0.3)'
-  }
-
-  const getFilteredBroadcasts = () => {
-    return broadcasts.filter(broadcast => {
-      // Single unified search across username, fixture, and league
-      if (searchBroadcast) {
-        const searchTerm = searchBroadcast.toLowerCase()
-        const username = (broadcast.created_by || '').toLowerCase()
-        const match = broadcast.matches
-
-        // Check username
-        if (username.includes(searchTerm)) return true
-
-        // Check fixture (home vs away teams)
-        if (match) {
-          const fixture = `${match.home} ${match.away}`.toLowerCase()
-          if (fixture.includes(searchTerm)) return true
-
-          // Check league
-          const league = (match.league || '').toLowerCase()
-          if (league.includes(searchTerm)) return true
-        }
-
-        // Check channel/country
-        if ((broadcast.channel || '').toLowerCase().includes(searchTerm)) return true
-        if ((broadcast.country || '').toLowerCase().includes(searchTerm)) return true
-
-        return false
-      }
-
-      return true
-    })
   }
 
   const getFilteredUsers = () => {
@@ -851,12 +742,11 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
         {/* Tabs */}
         <div style={{ display: "flex", gap: 4, marginBottom: 16, borderBottom: "1px solid #2a2a4a", paddingBottom: 0 }}>
           {[
-            { id: 'import', label: 'Import JSON', icon: 'upload' },
-            { id: 'fetch', label: 'Fetch from API', icon: 'download' },
+            { id: 'import', label: 'Import', icon: 'upload' },
+            { id: 'fetch', label: 'Fetch', icon: 'download' },
             { id: 'fixtures', label: 'Fixtures', icon: 'calendar' },
-            { id: 'broadcasts', label: 'Broadcasts', icon: 'tv' },
             { id: 'users', label: 'Users', icon: 'shield' },
-            { id: 'logs', label: 'View Logs', icon: 'list' }
+            { id: 'logs', label: 'Logs', icon: 'list' }
           ].map(tab => {
             const active = activeTab === tab.id
             return (
@@ -969,12 +859,9 @@ Example broadcasts:
 
               {error && <div style={{ padding: 8, marginBottom: 12, background: "rgba(244,67,54,0.15)", border: "1px solid rgba(244,67,54,0.3)", borderRadius: 6, color: "#e57373", fontSize: 11 }}>{error}</div>}
               {success && <div style={{ padding: 8, marginBottom: 12, background: "rgba(76,175,80,0.15)", border: "1px solid rgba(76,175,80,0.3)", borderRadius: 6, color: "#81c784", fontSize: 11 }}>{success}</div>}
-              <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={onClose} style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px solid #2a2a4a", background: "rgba(255,255,255,0.05)", color: "#aaa", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
-                <button onClick={handleImport} disabled={!jsonData.trim() || importing} style={{ flex: 2, padding: "10px 0", borderRadius: 8, border: "none", background: jsonData.trim() && !importing ? "linear-gradient(135deg,#00e5ff,#7c4dff)" : "#2a2a4a", color: "#fff", fontSize: 14, fontWeight: 600, cursor: jsonData.trim() && !importing ? "pointer" : "not-allowed" }}>
-                  {importing ? "Importing..." : importType === 'fixtures' ? 'Import Fixtures' : importType === 'broadcasts' ? 'Import Broadcasts' : 'Import to Supabase'}
-                </button>
-              </div>
+              <button onClick={handleImport} disabled={!jsonData.trim() || importing} style={{ width: "100%", padding: "10px 0", borderRadius: 8, border: "none", background: jsonData.trim() && !importing ? "linear-gradient(135deg,#00e5ff,#7c4dff)" : "#2a2a4a", color: "#fff", fontSize: 14, fontWeight: 600, cursor: jsonData.trim() && !importing ? "pointer" : "not-allowed" }}>
+                {importing ? "Importing..." : importType === 'fixtures' ? 'Import Fixtures' : importType === 'broadcasts' ? 'Import Broadcasts' : 'Import'}
+              </button>
             </div>
           )}
 
@@ -1123,26 +1010,23 @@ Example broadcasts:
               {error && <div style={{ padding: 8, background: "rgba(244,67,54,0.15)", border: "1px solid rgba(244,67,54,0.3)", borderRadius: 6, color: "#e57373", fontSize: 11 }}>{error}</div>}
               {success && <div style={{ padding: 8, background: "rgba(76,175,80,0.15)", border: "1px solid rgba(76,175,80,0.3)", borderRadius: 6, color: "#81c784", fontSize: 11 }}>{success}</div>}
 
-              <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={onClose} style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px solid #2a2a4a", background: "rgba(255,255,255,0.05)", color: "#aaa", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Close</button>
-                <button
-                  onClick={handleFetch}
-                  disabled={selectedDates.length === 0 || fetching}
-                  style={{
-                    flex: 2,
-                    padding: "10px 0",
-                    borderRadius: 8,
-                    border: "none",
-                    background: selectedDates.length > 0 && !fetching ? "linear-gradient(135deg,#00e5ff,#7c4dff)" : "#2a2a4a",
-                    color: "#fff",
-                    fontSize: 14,
-                    fontWeight: 600,
-                    cursor: selectedDates.length > 0 && !fetching ? "pointer" : "not-allowed"
-                  }}
-                >
-                  {fetching ? "Fetching..." : `Fetch All Sports${fetchBroadcastsToo ? ' + Broadcasts' : ''}`}
-                </button>
-              </div>
+              <button
+                onClick={handleFetch}
+                disabled={selectedDates.length === 0 || fetching}
+                style={{
+                  width: "100%",
+                  padding: "10px 0",
+                  borderRadius: 8,
+                  border: "none",
+                  background: selectedDates.length > 0 && !fetching ? "linear-gradient(135deg,#00e5ff,#7c4dff)" : "#2a2a4a",
+                  color: "#fff",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: selectedDates.length > 0 && !fetching ? "pointer" : "not-allowed"
+                }}
+              >
+                {fetching ? "Fetching..." : `Fetch All Sports${fetchBroadcastsToo ? ' + Broadcasts' : ''}`}
+              </button>
             </div>
           )}
 
@@ -1286,237 +1170,112 @@ Example broadcasts:
                   <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 350, overflowY: "auto" }}>
                     {getFilteredFixtures().map(fixture => {
                       const isSelected = selectedFixtures.includes(fixture.id)
+                      const isExpanded = expandedFixture === fixture.id
+                      const broadcastCount = fixture.broadcasts?.length || 0
                       return (
-                        <div
-                          key={fixture.id}
-                          style={{
-                            padding: 10,
-                            background: isSelected ? "rgba(0,229,255,0.08)" : "rgba(255,255,255,0.03)",
-                            border: isSelected ? "1px solid rgba(0,229,255,0.3)" : "1px solid #2a2a4a",
-                            borderRadius: 6,
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 10,
-                            cursor: "pointer"
-                          }}
-                          onClick={() => toggleFixtureSelection(fixture.id)}
-                        >
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              toggleFixtureSelection(fixture.id)
-                            }}
+                        <div key={fixture.id}>
+                          <div
                             style={{
-                              width: 18,
-                              height: 18,
-                              borderRadius: 4,
-                              border: isSelected ? "2px solid #00e5ff" : "2px solid #444",
-                              background: isSelected ? "#00e5ff" : "transparent",
+                              padding: 10,
+                              background: isSelected ? "rgba(0,229,255,0.08)" : "rgba(255,255,255,0.03)",
+                              border: isSelected ? "1px solid rgba(0,229,255,0.3)" : "1px solid #2a2a4a",
+                              borderRadius: isExpanded ? "6px 6px 0 0" : 6,
                               display: "flex",
                               alignItems: "center",
-                              justifyContent: "center",
-                              cursor: "pointer",
-                              flexShrink: 0
+                              gap: 10
                             }}
                           >
-                            {isSelected && <Icon name="check" size={12} color="#000" />}
-                          </button>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 11, color: "#fff", marginBottom: 4, fontWeight: 500 }}>
-                              {fixture.home} vs {fixture.away}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                toggleFixtureSelection(fixture.id)
+                              }}
+                              style={{
+                                width: 18,
+                                height: 18,
+                                borderRadius: 4,
+                                border: isSelected ? "2px solid #00e5ff" : "2px solid #444",
+                                background: isSelected ? "#00e5ff" : "transparent",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                cursor: "pointer",
+                                flexShrink: 0
+                              }}
+                            >
+                              {isSelected && <Icon name="check" size={12} color="#000" />}
+                            </button>
+                            <div style={{ flex: 1, minWidth: 0, cursor: "pointer" }} onClick={() => toggleFixtureExpand(fixture.id)}>
+                              <div style={{ fontSize: 11, color: "#fff", marginBottom: 4, fontWeight: 500 }}>
+                                {fixture.home} vs {fixture.away}
+                              </div>
+                              <div style={{ fontSize: 10, color: "#888", lineHeight: 1.4 }}>
+                                {fixture.sport} • {fixture.league}<br />
+                                {fixture.match_date} {fixture.match_time}
+                              </div>
                             </div>
-                            <div style={{ fontSize: 10, color: "#888", lineHeight: 1.4 }}>
-                              {fixture.sport} • {fixture.league}<br />
-                              {fixture.match_date} {fixture.match_time}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                toggleFixtureExpand(fixture.id)
+                              }}
+                              style={{
+                                padding: "2px 6px",
+                                borderRadius: 4,
+                                background: broadcastCount > 0 ? "rgba(255,159,28,0.15)" : "rgba(255,255,255,0.05)",
+                                border: broadcastCount > 0 ? "1px solid rgba(255,159,28,0.3)" : "1px solid #2a2a4a",
+                                fontSize: 9,
+                                color: broadcastCount > 0 ? "#ff9f1c" : "#666",
+                                fontWeight: 600,
+                                cursor: "pointer",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 4
+                              }}
+                            >
+                              <Icon name="tv" size={10} />
+                              {broadcastCount}
+                            </button>
+                          </div>
+                          {isExpanded && (
+                            <div style={{
+                              padding: 10,
+                              background: "rgba(0,0,0,0.2)",
+                              border: "1px solid #2a2a4a",
+                              borderTop: "none",
+                              borderRadius: "0 0 6px 6px"
+                            }}>
+                              {broadcastCount === 0 ? (
+                                <div style={{ fontSize: 10, color: "#555", textAlign: "center", padding: 8 }}>
+                                  No broadcasts linked
+                                </div>
+                              ) : (
+                                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                  {fixture.broadcasts.map(broadcast => (
+                                    <div key={broadcast.id} style={{
+                                      padding: "6px 8px",
+                                      background: "rgba(255,255,255,0.03)",
+                                      borderRadius: 4,
+                                      display: "flex",
+                                      justifyContent: "space-between",
+                                      alignItems: "center"
+                                    }}>
+                                      <div>
+                                        <span style={{ fontSize: 10, color: "#ff9f1c", fontWeight: 600 }}>{broadcast.channel}</span>
+                                        <span style={{ fontSize: 9, color: "#666", marginLeft: 6 }}>({broadcast.country})</span>
+                                      </div>
+                                      <span style={{ fontSize: 8, color: "#444", fontFamily: "monospace" }}>
+                                        {broadcast.source || 'user'}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
-                          </div>
-                          <div style={{
-                            padding: "2px 6px",
-                            borderRadius: 4,
-                            background: "rgba(0,229,255,0.1)",
-                            fontSize: 9,
-                            color: "#00e5ff",
-                            fontWeight: 600,
-                            whiteSpace: "nowrap"
-                          }}>
-                            {fixture.sport}
-                          </div>
+                          )}
                         </div>
                       )
                     })}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-
-          {activeTab === 'broadcasts' && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 8 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div style={{ fontSize: 11, color: "#888" }}>
-                    {broadcasts.length} broadcast{broadcasts.length !== 1 ? 's' : ''} total
-                    {selectedBroadcasts.length > 0 && ` • ${selectedBroadcasts.length} selected`}
-                  </div>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    {selectedBroadcasts.length > 0 && (
-                      <button
-                        onClick={confirmBulkDelete}
-                        disabled={deletingBroadcasts}
-                        style={{
-                          padding: "4px 10px",
-                          borderRadius: 6,
-                          border: "1px solid rgba(244,67,54,0.4)",
-                          background: "rgba(244,67,54,0.15)",
-                          color: "#e57373",
-                          fontSize: 10,
-                          cursor: deletingBroadcasts ? "not-allowed" : "pointer",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 4,
-                          fontWeight: 600
-                        }}
-                      >
-                        <Icon name="x" size={10} />
-                        {deletingBroadcasts ? "Deleting..." : `Delete (${selectedBroadcasts.length})`}
-                      </button>
-                    )}
-                    <button
-                      onClick={loadBroadcasts}
-                      disabled={loadingBroadcasts}
-                      style={{
-                        padding: "4px 10px",
-                        borderRadius: 6,
-                        border: "1px solid #2a2a4a",
-                        background: "rgba(255,255,255,0.05)",
-                        color: "#aaa",
-                        fontSize: 10,
-                        cursor: loadingBroadcasts ? "not-allowed" : "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 4
-                      }}
-                    >
-                      <Icon name="refresh" size={10} />
-                      {loadingBroadcasts ? "..." : "Refresh"}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Unified search */}
-                <div style={{ position: "relative" }}>
-                  <Icon name="search" size={12} color="#555" style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
-                  <input
-                    value={searchBroadcast}
-                    onChange={(e) => setSearchBroadcast(e.target.value)}
-                    placeholder="Search user email, teams, leagues..."
-                    style={{
-                      width: "100%",
-                      padding: "6px 10px 6px 30px",
-                      borderRadius: 6,
-                      border: "1px solid #2a2a4a",
-                      background: "#111122",
-                      color: "#fff",
-                      fontSize: 11,
-                      outline: "none",
-                      boxSizing: "border-box"
-                    }}
-                  />
-                </div>
-              </div>
-
-              {error && <div style={{ padding: 8, marginBottom: 8, background: "rgba(244,67,54,0.15)", border: "1px solid rgba(244,67,54,0.3)", borderRadius: 6, color: "#e57373", fontSize: 11 }}>{error}</div>}
-              {success && <div style={{ padding: 8, marginBottom: 8, background: "rgba(76,175,80,0.15)", border: "1px solid rgba(76,175,80,0.3)", borderRadius: 6, color: "#81c784", fontSize: 11 }}>{success}</div>}
-
-              {loadingBroadcasts ? (
-                <div style={{ textAlign: "center", padding: 40, color: "#555" }}>
-                  <div style={{ fontSize: 12 }}>Loading broadcasts...</div>
-                </div>
-              ) : broadcasts.length === 0 ? (
-                <div style={{ textAlign: "center", padding: 40, color: "#444" }}>
-                  <Icon name="tv" size={24} color="#444" style={{ marginBottom: 8, opacity: 0.4 }} />
-                  <p style={{ margin: 0, fontSize: 12 }}>No broadcasts yet</p>
-                </div>
-              ) : (
-                <>
-                  {getFilteredBroadcasts().length > 0 && (
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "rgba(255,255,255,0.02)", borderRadius: 6, marginBottom: 4 }}>
-                      <button
-                        onClick={toggleSelectAll}
-                        style={{
-                          width: 18,
-                          height: 18,
-                          borderRadius: 4,
-                          border: selectedBroadcasts.length === getFilteredBroadcasts().length ? "2px solid #00e5ff" : "2px solid #444",
-                          background: selectedBroadcasts.length === getFilteredBroadcasts().length ? "#00e5ff" : "transparent",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          cursor: "pointer"
-                        }}
-                      >
-                        {selectedBroadcasts.length === getFilteredBroadcasts().length && <Icon name="check" size={12} color="#000" />}
-                      </button>
-                      <span style={{ fontSize: 11, color: "#aaa", fontWeight: 600 }}>Select All</span>
-                    </div>
-                  )}
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 400, overflowY: "auto" }}>
-                    {getFilteredBroadcasts().map(broadcast => {
-                      const match = broadcast.matches
-                      const isSelected = selectedBroadcasts.includes(broadcast.id)
-                      return (
-                      <div
-                        key={broadcast.id}
-                        style={{
-                          padding: 10,
-                          background: isSelected ? "rgba(0,229,255,0.08)" : "rgba(255,255,255,0.03)",
-                          border: isSelected ? "1px solid rgba(0,229,255,0.3)" : "1px solid #2a2a4a",
-                          borderRadius: 6,
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 10,
-                          cursor: "pointer"
-                        }}
-                        onClick={() => toggleBroadcastSelection(broadcast.id)}
-                      >
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            toggleBroadcastSelection(broadcast.id)
-                          }}
-                          style={{
-                            width: 18,
-                            height: 18,
-                            borderRadius: 4,
-                            border: isSelected ? "2px solid #00e5ff" : "2px solid #444",
-                            background: isSelected ? "#00e5ff" : "transparent",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            cursor: "pointer",
-                            flexShrink: 0
-                          }}
-                        >
-                          {isSelected && <Icon name="check" size={12} color="#000" />}
-                        </button>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 11, color: "#fff", marginBottom: 4, fontWeight: 500 }}>
-                            {broadcast.country} • {broadcast.channel}
-                          </div>
-                          {match && (
-                            <div style={{ fontSize: 10, color: "#888", lineHeight: 1.4 }}>
-                              {match.sport} • {match.league}<br />
-                              {match.home} vs {match.away}<br />
-                              {match.match_date} {match.match_time}
-                            </div>
-                          )}
-                          <div style={{ fontSize: 9, color: "#555", marginTop: 4, fontFamily: "monospace" }}>
-                            Added by: {broadcast.created_by || 'Unknown'} • {new Date(broadcast.created_at).toLocaleString()}
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })}
                   </div>
                 </>
               )}
@@ -1793,18 +1552,6 @@ Example broadcasts:
       </div>
 
       {/* Confirm Delete Broadcasts Modal */}
-      {showDeleteConfirm && (
-        <ConfirmModal
-          onClose={() => setShowDeleteConfirm(false)}
-          onConfirm={handleBulkDelete}
-          title="Delete Broadcasts"
-          message={`Are you sure you want to delete ${selectedBroadcasts.length} broadcast${selectedBroadcasts.length > 1 ? 's' : ''}? This action cannot be undone.`}
-          confirmText="Delete"
-          cancelText="Cancel"
-          confirmColor="#e53935"
-        />
-      )}
-
       {/* Confirm Delete Fixtures Modal */}
       {showDeleteFixturesConfirm && (
         <ConfirmModal
