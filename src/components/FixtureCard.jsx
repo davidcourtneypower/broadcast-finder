@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from 'react'
 import { Icon } from './Icon'
 import { BroadcastPill } from './BroadcastPill'
-import { SPORT_COLORS } from '../config/constants'
 import { useUserPreferences } from '../hooks/useUserPreferences'
 import { getTimezoneAbbreviation } from '../utils/timeFormatting'
 
-export const FixtureCard = ({ match, user, onVote, onRequestAuth, onAddBroadcast, onDeleteBroadcast, isAdmin }) => {
+export const FixtureCard = ({ match, user, onVote, onRequestAuth, onAddBroadcast, onDeleteBroadcast, isAdmin, getSportColors }) => {
   const [expanded, setExpanded] = useState(false)
   const [relativeTime, setRelativeTime] = useState('')
-  const col = SPORT_COLORS[match.sport] || { accent: "#00e5ff", bg: "rgba(0,229,255,0.12)", glow: "rgba(0,229,255,0.25)" }
+  const col = getSportColors ? getSportColors(match.sport) : { accent: "#00e5ff", bg: "rgba(0,229,255,0.12)", glow: "rgba(0,229,255,0.25)" }
 
   // Use user preferences for timezone conversion
   const { formatTime, getStatus, getRelative, preferences } = useUserPreferences(user)

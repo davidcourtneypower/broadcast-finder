@@ -1,8 +1,6 @@
 import React, { useState } from 'react'
 import { Icon } from './Icon'
-import { SPORT_COLORS } from '../config/constants'
-
-export const FilterModal = ({ onClose, filters, onApply, allSports, matches }) => {
+export const FilterModal = ({ onClose, filters, onApply, allSports, matches, getSportColors }) => {
   const [localSports, setLocalSports] = useState(filters.sports || [])
   const [localCountries, setLocalCountries] = useState(filters.countries || [])
   const [localEvents, setLocalEvents] = useState(filters.events || [])
@@ -160,7 +158,7 @@ export const FilterModal = ({ onClose, filters, onApply, allSports, matches }) =
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                 {allSports.map(sport => {
                   const isSelected = localSports.includes(sport)
-                  const col = SPORT_COLORS[sport] || { accent: "#00e5ff", bg: "rgba(0,229,255,0.12)" }
+                  const col = getSportColors ? getSportColors(sport) : { accent: "#00e5ff", bg: "rgba(0,229,255,0.12)" }
                   return (
                     <button
                       key={sport}
@@ -227,7 +225,7 @@ export const FilterModal = ({ onClose, filters, onApply, allSports, matches }) =
                 {filteredEvents.map(event => {
                   const isSelected = localEvents.includes(event)
                   const sport = getSportForLeague(event)
-                  const sportColors = sport && SPORT_COLORS[sport] ? SPORT_COLORS[sport] : { accent: "#00e5ff", bg: "rgba(0,229,255,0.15)" }
+                  const sportColors = sport && getSportColors ? getSportColors(sport) : { accent: "#00e5ff", bg: "rgba(0,229,255,0.15)" }
                   return (
                     <button
                       key={event}

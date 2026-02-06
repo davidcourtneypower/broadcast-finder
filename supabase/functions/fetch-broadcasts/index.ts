@@ -6,7 +6,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { TheSportsDBv2Client } from './_shared/thesportsdb-v2-client.ts';
+import { TheSportsDBv2Client, TheSportsDBTVEvent } from './_shared/thesportsdb-v2-client.ts';
 
 interface BroadcastInsert {
   match_id: string;
@@ -72,6 +72,94 @@ function normalizeCountry(country: string): string {
   if (!country) return 'Global';
   const normalized = country.toLowerCase().trim();
   return COUNTRY_NORMALIZATIONS[normalized] || country;
+}
+
+/** Known country flag emojis for initial population */
+const FLAG_LOOKUP: Record<string, string> = {
+  'USA': '🇺🇸', 'UK': '🇬🇧', 'Canada': '🇨🇦', 'Australia': '🇦🇺',
+  'India': '🇮🇳', 'Germany': '🇩🇪', 'France': '🇫🇷', 'Spain': '🇪🇸',
+  'Italy': '🇮🇹', 'Portugal': '🇵🇹', 'China': '🇨🇳', 'Turkey': '🇹🇷',
+  'Greece': '🇬🇷', 'Lithuania': '🇱🇹', 'Serbia': '🇷🇸', 'Russia': '🇷🇺',
+  'Argentina': '🇦🇷', 'Brazil': '🇧🇷', 'Mexico': '🇲🇽', 'Japan': '🇯🇵',
+  'Global': '🌍',
+};
+
+/**
+ * Auto-populate countries and country_channels reference tables from broadcast data.
+ * Uses ON CONFLICT DO NOTHING so existing rows are never overwritten.
+ */
+async function upsertBroadcastReferenceData(
+  supabase: any,
+  tvEvents: TheSportsDBTVEvent[]
+) {
+  // 1. Collect unique countries and channels per country
+  const countrySet = new Set<string>();
+  const channelsByCountry = new Map<string, Set<string>>();
+
+  for (const tv of tvEvents) {
+    const country = normalizeCountry(tv.strCountry || 'Global');
+    countrySet.add(country);
+
+    if (tv.strChannel) {
+      if (!channelsByCountry.has(country)) {
+        channelsByCountry.set(country, new Set());
+      }
+      channelsByCountry.get(country)!.add(tv.strChannel);
+    }
+  }
+
+  // 2. Upsert countries
+  if (countrySet.size > 0) {
+    const countryRows = [...countrySet].map(name => ({
+      name,
+      flag_emoji: FLAG_LOOKUP[name] || '🌍'
+    }));
+    const { error: countryError } = await supabase
+      .from('countries')
+      .upsert(countryRows, { onConflict: 'name', ignoreDuplicates: true });
+
+    if (countryError) {
+      console.warn(`Failed to upsert countries: ${countryError.message}`);
+    } else {
+      console.log(`Upserted ${countrySet.size} countries to reference table`);
+    }
+  }
+
+  // 3. Upsert country_channels
+  if (channelsByCountry.size > 0) {
+    // Fetch country IDs
+    const { data: countriesData } = await supabase
+      .from('countries')
+      .select('id, name');
+
+    const countryIdMap = new Map<string, number>();
+    (countriesData || []).forEach((c: any) => countryIdMap.set(c.name, c.id));
+
+    const channelRows: { country_id: number; channel_name: string }[] = [];
+    for (const [country, channels] of channelsByCountry) {
+      const countryId = countryIdMap.get(country);
+      if (countryId) {
+        for (const channel of channels) {
+          channelRows.push({ country_id: countryId, channel_name: channel });
+        }
+      }
+    }
+
+    if (channelRows.length > 0) {
+      const batchSize = 100;
+      for (let i = 0; i < channelRows.length; i += batchSize) {
+        const batch = channelRows.slice(i, i + batchSize);
+        const { error: channelError } = await supabase
+          .from('country_channels')
+          .upsert(batch, { onConflict: 'country_id,channel_name', ignoreDuplicates: true });
+
+        if (channelError) {
+          console.warn(`Failed to upsert country_channels batch: ${channelError.message}`);
+        }
+      }
+      console.log(`Upserted ${channelRows.length} country_channels to reference table`);
+    }
+  }
 }
 
 const corsHeaders = {
@@ -148,6 +236,7 @@ serve(async (req) => {
     let totalUnmatched = 0;
     let totalBroadcastsInserted = 0;
     const errors: string[] = [];
+    const allRawTVEvents: TheSportsDBTVEvent[] = [];
 
     // Fetch TV broadcasts for each date
     for (const date of datesToFetch) {
@@ -162,6 +251,7 @@ serve(async (req) => {
 
         console.log(`Found ${tvEvents.length} TV events for ${date}`);
         totalTVEventsFound += tvEvents.length;
+        allRawTVEvents.push(...tvEvents);
 
         // Collect all broadcasts for batch insert
         const allBroadcasts: BroadcastInsert[] = [];
@@ -269,6 +359,13 @@ serve(async (req) => {
         console.error(errorMsg);
         errors.push(errorMsg);
       }
+    }
+
+    // Auto-populate countries and channels reference tables
+    try {
+      await upsertBroadcastReferenceData(supabase, allRawTVEvents);
+    } catch (refError) {
+      console.warn('Reference data upsert failed (non-fatal):', refError);
     }
 
     // Log to api_fetch_logs

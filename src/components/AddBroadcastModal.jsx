@@ -1,9 +1,8 @@
 import React, { useState } from 'react'
 import { Icon } from './Icon'
 import { getFlag } from '../utils/helpers'
-import { CHANNELS_BY_COUNTRY, COUNTRIES } from '../config/constants'
 
-export const AddBroadcastModal = ({ onClose, match, onAdd, user }) => {
+export const AddBroadcastModal = ({ onClose, match, onAdd, user, countryNames, getChannelsForCountry }) => {
   const [selectedCountry, setSelectedCountry] = useState("")
   const [selectedChannel, setSelectedChannel] = useState("")
   const [adding, setAdding] = useState(false)
@@ -12,8 +11,9 @@ export const AddBroadcastModal = ({ onClose, match, onAdd, user }) => {
   const existingBroadcasts = match.broadcasts || []
 
   // Filter channels: exclude ones already added for the selected country
+  const allChannels = selectedCountry && getChannelsForCountry ? getChannelsForCountry(selectedCountry) : []
   const availableChannels = selectedCountry
-    ? CHANNELS_BY_COUNTRY[selectedCountry].filter(channel => {
+    ? allChannels.filter(channel => {
         // Check if this country + channel combination already exists
         const isDuplicate = existingBroadcasts.some(
           b => b.country === selectedCountry && b.channel === channel
@@ -49,7 +49,7 @@ export const AddBroadcastModal = ({ onClose, match, onAdd, user }) => {
           <label style={{ color: "#aaa", fontSize: 11, fontFamily: "monospace", textTransform: "uppercase", letterSpacing: 1, display: "block", marginBottom: 6 }}>Country/Region</label>
           <select value={selectedCountry} onChange={(e) => { setSelectedCountry(e.target.value); setSelectedChannel("") }} style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid #2a2a4a", background: "#111122", color: "#fff", fontSize: 13, outline: "none" }}>
             <option value="">Select country...</option>
-            {COUNTRIES.map(c => <option key={c} value={c}>{getFlag(c)} {c}</option>)}
+            {(countryNames || []).map(c => <option key={c} value={c}>{getFlag(c)} {c}</option>)}
           </select>
         </div>
         {selectedCountry && (

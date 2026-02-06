@@ -10,10 +10,11 @@ import { AuthModal } from './components/AuthModal'
 import { AddBroadcastModal } from './components/AddBroadcastModal'
 import { AdminDataModal } from './components/AdminDataModal'
 import { UserSettingsModal } from './components/UserSettingsModal'
-import { getSportConfig } from './config/sports'
+import { useReferenceData } from './hooks/useReferenceData'
 
 function App() {
   const { user, loading: authLoading, signInWithGoogle, signOut } = useAuth()
+  const { getSportConfig, getSportColors, getCountryNames, getChannelsForCountry } = useReferenceData()
   const [isAdmin, setIsAdmin] = useState(false)
   const [showAuth, setShowAuth] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
@@ -733,6 +734,7 @@ function App() {
                   onAddBroadcast={openAddBroadcast}
                   onDeleteBroadcast={handleDeleteBroadcast}
                   isAdmin={isAdmin}
+                  getSportColors={getSportColors}
                 />
               ))}
             </div>
@@ -789,8 +791,8 @@ function App() {
       
       {/* Modals */}
       {showAuth && <AuthModal onClose={() => setShowAuth(false)} signInWithGoogle={signInWithGoogle} />}
-      {showFilters && <FilterModal onClose={() => setShowFilters(false)} filters={filters} onApply={setFilters} allSports={allSports} matches={matches} />}
-      {showAddBroadcast && selectedMatch && <AddBroadcastModal onClose={() => setShowAddBroadcast(false)} match={selectedMatch} onAdd={handleAddBroadcast} user={user} />}
+      {showFilters && <FilterModal onClose={() => setShowFilters(false)} filters={filters} onApply={setFilters} allSports={allSports} matches={matches} getSportColors={getSportColors} />}
+      {showAddBroadcast && selectedMatch && <AddBroadcastModal onClose={() => setShowAddBroadcast(false)} match={selectedMatch} onAdd={handleAddBroadcast} user={user} countryNames={getCountryNames()} getChannelsForCountry={getChannelsForCountry} />}
       {showAdminPanel && <AdminDataModal onClose={() => setShowAdminPanel(false)} onUpdate={loadMatches} currentUserEmail={user?.email} />}
       {showUserSettings && <UserSettingsModal onClose={() => setShowUserSettings(false)} onSave={handleSettingsSaved} user={user} />}
     </div>

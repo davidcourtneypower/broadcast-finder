@@ -26,6 +26,33 @@ interface SportStats {
   eventsInserted: number;
 }
 
+/** Map common country codes/names to standardized names */
+const COUNTRY_NORMALIZATIONS: Record<string, string> = {
+  'us': 'USA', 'usa': 'USA', 'united states': 'USA', 'united states of america': 'USA',
+  'uk': 'UK', 'gb': 'UK', 'united kingdom': 'UK', 'great britain': 'UK', 'england': 'UK',
+  'ca': 'Canada', 'can': 'Canada',
+  'de': 'Germany', 'ger': 'Germany', 'deutschland': 'Germany',
+  'fr': 'France', 'fra': 'France',
+  'es': 'Spain', 'esp': 'Spain', 'españa': 'Spain',
+  'it': 'Italy', 'ita': 'Italy', 'italia': 'Italy',
+  'au': 'Australia', 'aus': 'Australia',
+  'in': 'India', 'ind': 'India',
+  'cn': 'China', 'chn': 'China',
+  'jp': 'Japan', 'jpn': 'Japan',
+  'br': 'Brazil', 'bra': 'Brazil', 'brasil': 'Brazil',
+  'mx': 'Mexico', 'mex': 'Mexico', 'méxico': 'Mexico',
+  'ar': 'Argentina', 'arg': 'Argentina',
+  'tr': 'Turkey', 'tur': 'Turkey', 'türkiye': 'Turkey',
+  'ru': 'Russia', 'rus': 'Russia',
+  'worldwide': 'Global', 'international': 'Global', 'world': 'Global',
+};
+
+function normalizeCountry(country: string): string {
+  if (!country) return 'Global';
+  const normalized = country.toLowerCase().trim();
+  return COUNTRY_NORMALIZATIONS[normalized] || country;
+}
+
 /**
  * Transform TheSportsDB event to our matches table format
  */
@@ -49,10 +76,86 @@ function transformEvent(event: TheSportsDBEvent): MatchInsert | null {
     away: event.strAwayTeam,
     match_date: event.dateEvent,
     match_time: event.strTime?.substring(0, 5) || '00:00',
-    country: event.strCountry || 'Global',
+    country: normalizeCountry(event.strCountry || 'Global'),
     status: 'upcoming', // Status calculated dynamically by frontend
     popularity: 70 // Default popularity
   };
+}
+
+/**
+ * Auto-populate sports and leagues reference tables from discovered event data.
+ * Uses ON CONFLICT DO NOTHING so existing rows are never overwritten.
+ */
+async function upsertReferenceData(
+  supabase: any,
+  events: TheSportsDBEvent[]
+) {
+  // 1. Collect unique sports
+  const uniqueSports = [...new Set(
+    events.map(e => e.strSport).filter(Boolean)
+  )];
+
+  if (uniqueSports.length > 0) {
+    const sportRows = uniqueSports.map(name => ({ name }));
+    const { error: sportError } = await supabase
+      .from('sports')
+      .upsert(sportRows, { onConflict: 'name', ignoreDuplicates: true });
+
+    if (sportError) {
+      console.warn(`Failed to upsert sports: ${sportError.message}`);
+    } else {
+      console.log(`Upserted ${uniqueSports.length} sports to reference table`);
+    }
+  }
+
+  // 2. Collect unique leagues and link to sports
+  const leagueMap = new Map<string, { name: string; sport: string; sportsdbId: string }>();
+  for (const event of events) {
+    if (event.strLeague && event.strSport) {
+      const key = `${event.strLeague}|${event.strSport}`;
+      if (!leagueMap.has(key)) {
+        leagueMap.set(key, {
+          name: event.strLeague,
+          sport: event.strSport,
+          sportsdbId: event.idLeague
+        });
+      }
+    }
+  }
+
+  if (leagueMap.size > 0) {
+    // Fetch sport IDs
+    const { data: sportsData } = await supabase
+      .from('sports')
+      .select('id, name');
+
+    const sportIdMap = new Map<string, number>();
+    (sportsData || []).forEach((s: any) => sportIdMap.set(s.name, s.id));
+
+    const leagueRows = [];
+    for (const league of leagueMap.values()) {
+      const sportId = sportIdMap.get(league.sport);
+      if (sportId) {
+        leagueRows.push({
+          name: league.name,
+          sport_id: sportId,
+          sportsdb_league_id: league.sportsdbId
+        });
+      }
+    }
+
+    if (leagueRows.length > 0) {
+      const { error: leagueError } = await supabase
+        .from('leagues')
+        .upsert(leagueRows, { onConflict: 'name,sport_id', ignoreDuplicates: true });
+
+      if (leagueError) {
+        console.warn(`Failed to upsert leagues: ${leagueError.message}`);
+      } else {
+        console.log(`Upserted ${leagueRows.length} leagues to reference table`);
+      }
+    }
+  }
 }
 
 const corsHeaders = {
@@ -107,6 +210,7 @@ serve(async (req) => {
     let totalEventsInserted = 0;
     const sportStats: Record<string, SportStats> = {};
     const errors: string[] = [];
+    const allRawEvents: TheSportsDBEvent[] = [];
 
     // Fetch events for each date
     for (const date of datesToFetch) {
@@ -121,6 +225,7 @@ serve(async (req) => {
 
         console.log(`Found ${events.length} events for ${date}`);
         totalEventsFound += events.length;
+        allRawEvents.push(...events);
 
         // Transform events
         const matches: MatchInsert[] = [];
@@ -192,6 +297,13 @@ serve(async (req) => {
         console.error(errorMsg);
         errors.push(errorMsg);
       }
+    }
+
+    // Auto-populate sports and leagues reference tables
+    try {
+      await upsertReferenceData(supabase, allRawEvents);
+    } catch (refError) {
+      console.warn('Reference data upsert failed (non-fatal):', refError);
     }
 
     // Log to api_fetch_logs
