@@ -32,54 +32,86 @@ function App() {
   const loadMatches = async () => {
     setLoading(true)
     try {
-      const { data: matchesData, error: matchesError } = await supabase
-        .from("matches")
-        .select("*")
-        .order("match_date", { ascending: true })
+      const today = getTodayStr()
+      const tomorrow = getTomorrowStr()
 
-      if (matchesError) {
-        console.error("Error loading matches:", matchesError)
-        setLoading(false)
-        return
+      // Fetch matches in pages to avoid Supabase 1000-row default limit
+      let matchesData = []
+      const PAGE_SIZE = 1000
+      let from = 0
+      while (true) {
+        const { data, error } = await supabase
+          .from("matches")
+          .select("*")
+          .gte("match_date", today)
+          .lte("match_date", tomorrow)
+          .order("match_date", { ascending: true })
+          .range(from, from + PAGE_SIZE - 1)
+
+        if (error) {
+          console.error("Error loading matches:", error)
+          setLoading(false)
+          return
+        }
+
+        matchesData = matchesData.concat(data || [])
+        if (!data || data.length < PAGE_SIZE) break
+        from += PAGE_SIZE
       }
 
       if (matchesData && matchesData.length > 0) {
         const matchIds = matchesData.map(m => m.id)
 
         // Fetch broadcasts in batches to avoid URL length limits
+        // Each batch is also paginated to avoid Supabase 1000-row default limit
         let broadcasts = []
         const MATCH_BATCH_SIZE = 50
         for (let i = 0; i < matchIds.length; i += MATCH_BATCH_SIZE) {
           const batch = matchIds.slice(i, i + MATCH_BATCH_SIZE)
-          const { data: batchData, error: broadcastsError } = await supabase
-            .from("broadcasts")
-            .select("*")
-            .in("match_id", batch)
+          let batchFrom = 0
+          while (true) {
+            const { data: batchData, error: broadcastsError } = await supabase
+              .from("broadcasts")
+              .select("*")
+              .in("match_id", batch)
+              .range(batchFrom, batchFrom + PAGE_SIZE - 1)
 
-          if (broadcastsError) {
-            console.error("Error loading broadcasts:", broadcastsError)
-          } else {
+            if (broadcastsError) {
+              console.error("Error loading broadcasts:", broadcastsError)
+              break
+            }
+
             broadcasts = broadcasts.concat(batchData || [])
+            if (!batchData || batchData.length < PAGE_SIZE) break
+            batchFrom += PAGE_SIZE
           }
         }
 
         const broadcastIds = broadcasts.map(b => b.id)
 
         // Fetch votes in batches to avoid URL length limits
+        // Each batch is also paginated to avoid Supabase 1000-row default limit
         let votes = []
         if (broadcastIds.length > 0) {
-          const BATCH_SIZE = 50
-          for (let i = 0; i < broadcastIds.length; i += BATCH_SIZE) {
-            const batch = broadcastIds.slice(i, i + BATCH_SIZE)
-            const { data: votesData, error: votesError } = await supabase
-              .from("votes")
-              .select("*")
-              .in("broadcast_id", batch)
+          const VOTE_BATCH_SIZE = 50
+          for (let i = 0; i < broadcastIds.length; i += VOTE_BATCH_SIZE) {
+            const batch = broadcastIds.slice(i, i + VOTE_BATCH_SIZE)
+            let batchFrom = 0
+            while (true) {
+              const { data: votesData, error: votesError } = await supabase
+                .from("votes")
+                .select("*")
+                .in("broadcast_id", batch)
+                .range(batchFrom, batchFrom + PAGE_SIZE - 1)
 
-            if (votesError) {
-              console.error("Error loading votes:", votesError)
-            } else {
+              if (votesError) {
+                console.error("Error loading votes:", votesError)
+                break
+              }
+
               votes = votes.concat(votesData || [])
+              if (!votesData || votesData.length < PAGE_SIZE) break
+              batchFrom += PAGE_SIZE
             }
           }
         }
