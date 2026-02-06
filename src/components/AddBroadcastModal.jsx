@@ -1,8 +1,9 @@
 import React, { useState } from 'react'
 import { Icon } from './Icon'
-import { getFlag } from '../utils/helpers'
+import { getFlag as staticGetFlag } from '../utils/helpers'
 
-export const AddBroadcastModal = ({ onClose, match, onAdd, user, countryNames, getChannelsForCountry }) => {
+export const AddBroadcastModal = ({ onClose, match, onAdd, user, countryNames, getChannelsForCountry, getFlag: getFlagProp }) => {
+  const getFlag = getFlagProp || staticGetFlag
   const [selectedCountry, setSelectedCountry] = useState("")
   const [selectedChannel, setSelectedChannel] = useState("")
   const [adding, setAdding] = useState(false)

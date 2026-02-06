@@ -24,6 +24,14 @@ const SPORT_DURATIONS = {
   'MMA': 60,
   'Volleyball': 120,
   'Handball': 90,
+  'Field Hockey': 90,
+  'Fighting': 60,
+  'Olympics': 180,
+  'Skating': 120,
+  'Snooker': 300,
+  'Wintersports': 150,
+  'Gaelic': 90,
+  'Skiing': 150,
   'default': 150
 }
 
@@ -47,6 +55,14 @@ const SPORT_COLORS = {
   'MMA': { accent: '#9c27b0', bg: 'rgba(156,39,176,0.12)' },
   'Volleyball': { accent: '#ffc107', bg: 'rgba(255,193,7,0.12)' },
   'Handball': { accent: '#03a9f4', bg: 'rgba(3,169,244,0.12)' },
+  'Field Hockey': { accent: '#1b5e20', bg: 'rgba(27,94,32,0.12)' },
+  'Fighting': { accent: '#b71c1c', bg: 'rgba(183,28,28,0.12)' },
+  'Olympics': { accent: '#ffd700', bg: 'rgba(255,215,0,0.12)' },
+  'Skating': { accent: '#80deea', bg: 'rgba(128,222,234,0.12)' },
+  'Snooker': { accent: '#558b2f', bg: 'rgba(85,139,47,0.12)' },
+  'Wintersports': { accent: '#b3e5fc', bg: 'rgba(179,229,252,0.12)' },
+  'Gaelic': { accent: '#e65100', bg: 'rgba(230,81,0,0.12)' },
+  'Skiing': { accent: '#90caf9', bg: 'rgba(144,202,249,0.12)' },
 }
 
 /**

@@ -1,8 +1,9 @@
 import React from 'react'
 import { Icon } from './Icon'
-import { getFlag } from '../utils/helpers'
+import { getFlag as staticGetFlag } from '../utils/helpers'
 
-export const BroadcastPill = ({ broadcast, voteStats, user, onVote, onRequestAuth, onDelete, isAdmin }) => {
+export const BroadcastPill = ({ broadcast, voteStats, user, onVote, onRequestAuth, onDelete, isAdmin, getFlag: getFlagProp }) => {
+  const getFlag = getFlagProp || staticGetFlag
   const upCount = voteStats.up || 0
   const downCount = voteStats.down || 0
   const myVote = voteStats.myVote

@@ -4,7 +4,7 @@ import { BroadcastPill } from './BroadcastPill'
 import { useUserPreferences } from '../hooks/useUserPreferences'
 import { getTimezoneAbbreviation } from '../utils/timeFormatting'
 
-export const FixtureCard = ({ match, user, onVote, onRequestAuth, onAddBroadcast, onDeleteBroadcast, isAdmin, getSportColors }) => {
+export const FixtureCard = ({ match, user, onVote, onRequestAuth, onAddBroadcast, onDeleteBroadcast, isAdmin, getSportColors, getFlag }) => {
   const [expanded, setExpanded] = useState(false)
   const [relativeTime, setRelativeTime] = useState('')
   const col = getSportColors ? getSportColors(match.sport) : { accent: "#00e5ff", bg: "rgba(0,229,255,0.12)", glow: "rgba(0,229,255,0.25)" }
@@ -133,6 +133,7 @@ export const FixtureCard = ({ match, user, onVote, onRequestAuth, onAddBroadcast
                   onRequestAuth={onRequestAuth}
                   onDelete={onDeleteBroadcast}
                   isAdmin={isAdmin}
+                  getFlag={getFlag}
                 />
               ))}
             </div>

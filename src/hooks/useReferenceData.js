@@ -7,7 +7,10 @@ const FALLBACK_DURATIONS = {
   'American Football': 210, 'Ice Hockey': 150, 'Tennis': 180,
   'Baseball': 210, 'Rugby': 120, 'Cricket': 480, 'Golf': 300,
   'Motorsport': 180, 'Boxing': 60, 'MMA': 60,
-  'Volleyball': 120, 'Handball': 90
+  'Volleyball': 120, 'Handball': 90,
+  'Field Hockey': 90, 'Fighting': 60, 'Olympics': 180,
+  'Skating': 120, 'Snooker': 300, 'Wintersports': 150,
+  'Gaelic': 90, 'Skiing': 150
 }
 
 // Fallback sport colors (matches current sports.js values)
@@ -27,6 +30,14 @@ const FALLBACK_COLORS = {
   'MMA': { accent: '#9c27b0', bg: 'rgba(156,39,176,0.12)' },
   'Volleyball': { accent: '#ffc107', bg: 'rgba(255,193,7,0.12)' },
   'Handball': { accent: '#03a9f4', bg: 'rgba(3,169,244,0.12)' },
+  'Field Hockey': { accent: '#1b5e20', bg: 'rgba(27,94,32,0.12)' },
+  'Fighting': { accent: '#b71c1c', bg: 'rgba(183,28,28,0.12)' },
+  'Olympics': { accent: '#ffd700', bg: 'rgba(255,215,0,0.12)' },
+  'Skating': { accent: '#80deea', bg: 'rgba(128,222,234,0.12)' },
+  'Snooker': { accent: '#558b2f', bg: 'rgba(85,139,47,0.12)' },
+  'Wintersports': { accent: '#b3e5fc', bg: 'rgba(179,229,252,0.12)' },
+  'Gaelic': { accent: '#e65100', bg: 'rgba(230,81,0,0.12)' },
+  'Skiing': { accent: '#90caf9', bg: 'rgba(144,202,249,0.12)' },
 }
 
 const DEFAULT_ACCENT = '#00e5ff'
@@ -41,7 +52,20 @@ const FALLBACK_FLAGS = {
   Italy: '🇮🇹', Portugal: '🇵🇹', Sudan: '🇸🇩',
   China: '🇨🇳', Turkey: '🇹🇷', Greece: '🇬🇷', Lithuania: '🇱🇹',
   Serbia: '🇷🇸', Russia: '🇷🇺', Argentina: '🇦🇷', Brazil: '🇧🇷',
-  Mexico: '🇲🇽', Japan: '🇯🇵', Global: '🌍'
+  Mexico: '🇲🇽', Japan: '🇯🇵',
+  Latvia: '🇱🇻', 'New Zealand': '🇳🇿', Poland: '🇵🇱', Slovenia: '🇸🇮',
+  Croatia: '🇭🇷', Czechia: '🇨🇿', Switzerland: '🇨🇭', Austria: '🇦🇹',
+  Belgium: '🇧🇪', Norway: '🇳🇴', Finland: '🇫🇮', Slovakia: '🇸🇰',
+  Ireland: '🇮🇪', Sweden: '🇸🇪', 'South Africa': '🇿🇦', Paraguay: '🇵🇾',
+  Bulgaria: '🇧🇬', Denmark: '🇩🇰', Iceland: '🇮🇸', 'The Netherlands': '🇳🇱',
+  Azerbaijan: '🇦🇿', Indonesia: '🇮🇩', Vietnam: '🇻🇳', Romania: '🇷🇴',
+  Qatar: '🇶🇦', 'Saudi Arabia': '🇸🇦', Israel: '🇮🇱', Thailand: '🇹🇭',
+  Singapore: '🇸🇬', Malaysia: '🇲🇾', 'Bosnia and Herzegovina': '🇧🇦',
+  Chile: '🇨🇱', Colombia: '🇨🇴', Ukraine: '🇺🇦', Belarus: '🇧🇾',
+  Nicaragua: '🇳🇮', Guatemala: '🇬🇹', Peru: '🇵🇪', 'El Salvador': '🇸🇻',
+  Honduras: '🇭🇳', Estonia: '🇪🇪', 'Costa Rica': '🇨🇷', Albania: '🇦🇱',
+  'South Korea': '🇰🇷', Philippines: '🇵🇭', Hungary: '🇭🇺',
+  Global: '🌍'
 }
 
 export const useReferenceData = () => {
