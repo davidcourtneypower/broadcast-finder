@@ -45,29 +45,41 @@ function App() {
       if (matchesData && matchesData.length > 0) {
         const matchIds = matchesData.map(m => m.id)
 
-        const { data: broadcasts, error: broadcastsError } = await supabase
-          .from("broadcasts")
-          .select("*")
-          .in("match_id", matchIds)
+        // Fetch broadcasts in batches to avoid URL length limits
+        let broadcasts = []
+        const MATCH_BATCH_SIZE = 50
+        for (let i = 0; i < matchIds.length; i += MATCH_BATCH_SIZE) {
+          const batch = matchIds.slice(i, i + MATCH_BATCH_SIZE)
+          const { data: batchData, error: broadcastsError } = await supabase
+            .from("broadcasts")
+            .select("*")
+            .in("match_id", batch)
 
-        if (broadcastsError) {
-          console.error("Error loading broadcasts:", broadcastsError)
+          if (broadcastsError) {
+            console.error("Error loading broadcasts:", broadcastsError)
+          } else {
+            broadcasts = broadcasts.concat(batchData || [])
+          }
         }
 
-        const broadcastIds = (broadcasts || []).map(b => b.id)
+        const broadcastIds = broadcasts.map(b => b.id)
 
-        // Only fetch votes if there are broadcasts
+        // Fetch votes in batches to avoid URL length limits
         let votes = []
         if (broadcastIds.length > 0) {
-          const { data: votesData, error: votesError } = await supabase
-            .from("votes")
-            .select("*")
-            .in("broadcast_id", broadcastIds)
+          const BATCH_SIZE = 50
+          for (let i = 0; i < broadcastIds.length; i += BATCH_SIZE) {
+            const batch = broadcastIds.slice(i, i + BATCH_SIZE)
+            const { data: votesData, error: votesError } = await supabase
+              .from("votes")
+              .select("*")
+              .in("broadcast_id", batch)
 
-          if (votesError) {
-            console.error("Error loading votes:", votesError)
-          } else {
-            votes = votesData || []
+            if (votesError) {
+              console.error("Error loading votes:", votesError)
+            } else {
+              votes = votes.concat(votesData || [])
+            }
           }
         }
 
