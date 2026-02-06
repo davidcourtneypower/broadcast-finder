@@ -1,8 +1,10 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { Icon } from './Icon'
+import { ConfirmModal } from './ConfirmModal'
 import { getFlag as staticGetFlag } from '../utils/helpers'
 
 export const BroadcastPill = ({ broadcast, voteStats, user, onVote, onRequestAuth, onDelete, isAdmin, getFlag: getFlagProp }) => {
+  const [showConfirm, setShowConfirm] = useState(false)
   const getFlag = getFlagProp || staticGetFlag
   const upCount = voteStats.up || 0
   const downCount = voteStats.down || 0
@@ -33,9 +35,7 @@ export const BroadcastPill = ({ broadcast, voteStats, user, onVote, onRequestAut
   }
 
   const handleDelete = () => {
-    if (window.confirm('Delete this broadcast?')) {
-      onDelete(broadcast.id)
-    }
+    setShowConfirm(true)
   }
 
   return (
@@ -106,6 +106,16 @@ export const BroadcastPill = ({ broadcast, voteStats, user, onVote, onRequestAut
           )}
         </div>
       </div>
+      {showConfirm && (
+        <ConfirmModal
+          title="Delete Broadcast"
+          message={`Are you sure you want to delete the broadcast "${broadcast.channel}" (${broadcast.country})?`}
+          confirmText="Delete"
+          confirmColor="#e53935"
+          onConfirm={() => onDelete(broadcast.id)}
+          onClose={() => setShowConfirm(false)}
+        />
+      )}
     </div>
   )
 }

@@ -155,7 +155,7 @@ export const FixtureCard = ({ match, user, onVote, onRequestAuth, onAddBroadcast
                     }}
                   >
                     {opt.label}
-                    {isActive && <Icon name={sortAsc ? "sortAsc" : "sortDesc"} size={10} color="#00e5ff" />}
+                    {isActive && <Icon name={sortAsc ? "sortDesc" : "sortAsc"} size={10} color="#00e5ff" />}
                   </button>
                 )
               })}
