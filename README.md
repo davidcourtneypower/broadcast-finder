@@ -1,40 +1,44 @@
 # BroadcastFinder
 
-A community-powered sports broadcast finder application that helps users discover where to watch sports matches worldwide.
+A community-powered sports broadcast finder application that helps users discover where to watch sports matches worldwide. Automatically fetches fixture and broadcast data from TheSportsDB, with community voting to verify accuracy.
 
 ## Features
 
-- **Live Match Tracking**: View sports matches with real-time status indicators
-- **Broadcast Information**: Community-contributed broadcasting channels by country
-- **Voting System**: Upvote/downvote broadcasts for accuracy and reliability
-- **User Authentication**: Secure authentication via Supabase Auth (email/password)
-- **User Preferences**: Personalized timezone and time format settings
-- **Timezone Support**: Automatic conversion of match times to user's preferred timezone
-- **Smart Filtering**: Filter by sports, countries, and events
+- **13+ Sports**: Soccer, Basketball, American Football, Ice Hockey, Tennis, Baseball, Rugby, Cricket, Golf, Motorsport, Boxing/MMA, Volleyball, Handball
+- **Automated Data**: Fixtures fetched hourly, broadcasts every 15 minutes via Supabase pg_cron
+- **Live Match Tracking**: Real-time status indicators (LIVE, STARTING SOON, UPCOMING, FINISHED)
+- **Broadcast Information**: Auto-fetched from TheSportsDB + community-contributed channels
+- **Voting System**: Upvote/downvote broadcasts with instant optimistic UI updates
+- **Google OAuth**: Sign in with Google via Supabase Auth
+- **Timezone Support**: Automatic conversion to user's preferred timezone (12h/24h format)
+- **Smart Filtering**: Filter by sports, countries, events, and match status
 - **Search**: Find matches by team names, leagues, or sports
-- **Date Navigation**: Browse matches for Today, Tomorrow, or This Week
-- **Mobile-First Design**: Optimized for mobile and desktop viewing
-- **Broadcast Source Tracking**: Distinguish between user-contributed and auto-fetched data
+- **Real-time Updates**: Supabase Realtime subscriptions for broadcasts and votes
+- **Mobile-First Design**: Optimized for mobile (max-width: 440px)
+- **Admin Panel**: Import data, manage fixtures, view logs, manage users
 
 ## Tech Stack
 
-- **Frontend**: React 18 + Vite
-- **Backend**: Supabase (PostgreSQL + Auth + Real-time)
-- **Styling**: CSS-in-JS (no external framework)
+- **Frontend**: React 18 + Vite 7
+- **Backend**: Supabase (PostgreSQL + Auth + Real-time + Edge Functions)
+- **Data Source**: TheSportsDB API (v1 & v2)
+- **Scheduling**: Supabase pg_cron + pg_net
+- **Deployment**: GitHub Pages (auto-deploy on push)
+- **Styling**: Inline CSS-in-JS (no external framework)
 
 ## Getting Started
 
 ### Prerequisites
 
 - Node.js (v16 or higher)
-- npm or yarn
-- Supabase account (for backend setup)
+- npm
+- Supabase account
 
 ### Installation
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
+git clone https://github.com/davidcourtneypower/broadcast-finder.git
 cd broadcast-finder
 ```
 
@@ -45,15 +49,14 @@ npm install
 
 3. Configure environment variables:
    - Copy `.env.example` to `.env`
-   - Update `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` with your Supabase credentials
-   - The project uses Supabase for authentication and database
+   - Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`
 
 4. Start the development server:
 ```bash
 npm run dev
 ```
 
-5. Open your browser to `http://localhost:3000`
+5. Open `http://localhost:3000`
 
 ### Build for Production
 
@@ -66,124 +69,139 @@ npm run preview
 
 ```
 broadcast-finder/
-├── api-response-examples/   # API response examples (reference data)
-├── public/                  # Static assets
+├── .github/workflows/          # CI/CD (deploy, manual fetch/cleanup)
 ├── src/
-│   ├── components/          # React components
-│   ├── config/              # Configuration files
-│   ├── hooks/               # Custom React hooks
-│   ├── utils/               # Utility functions
-│   ├── App.jsx              # Main application
-│   ├── main.jsx             # Entry point
-│   └── styles.css           # Global styles
+│   ├── components/             # React components (10 files)
+│   ├── config/                 # Constants, sports config, Supabase client
+│   ├── hooks/                  # useAuth, useUserPreferences
+│   ├── utils/                  # Helpers, time formatting, user profiles
+│   ├── App.jsx                 # Main application
+│   └── main.jsx                # Entry point
 ├── supabase/
-│   ├── functions/           # Edge Functions
-│   └── migrations/          # Database migrations
-├── .env                     # Environment variables (not in git)
-├── .env.example             # Environment template
-├── index.html               # HTML entry point
-└── vite.config.js           # Vite configuration
+│   ├── functions/              # Edge Functions (4 functions + shared utils)
+│   │   ├── _shared/            # Shared API clients and transformers
+│   │   ├── fetch-all-sports/   # Fetch fixtures from TheSportsDB
+│   │   ├── fetch-broadcasts/   # Fetch TV broadcasts from TheSportsDB
+│   │   ├── cleanup-old-data/   # Delete past match data
+│   │   └── fetch-fixtures/     # Legacy fixture fetcher
+│   └── migrations/             # 8 database migrations
+├── .env.example                # Environment template
+├── vite.config.js              # Vite configuration
+└── package.json                # Dependencies
+```
+
+## Automated Data Pipeline
+
+Data is fetched automatically via Supabase pg_cron:
+
+| Schedule | Function | Description |
+|----------|----------|-------------|
+| Every 1 hour | `fetch-all-sports` | Fetch fixtures for today + tomorrow + day after |
+| Every 15 min | `fetch-broadcasts` | Fetch TV broadcasts and link to fixtures |
+| Daily 3 AM UTC | `cleanup-old-data` | Delete past matches, broadcasts, and votes |
+
+GitHub Actions workflows are also available for manual triggering.
+
+### Deploying Edge Functions
+
+```bash
+npx supabase functions deploy fetch-all-sports --no-verify-jwt
+npx supabase functions deploy fetch-broadcasts --no-verify-jwt
+npx supabase functions deploy cleanup-old-data --no-verify-jwt
 ```
 
 ## Usage
 
 ### For Users
 
-1. **Browse Matches**: View available sports matches organized by date
-2. **Search**: Use the search bar to find specific teams or leagues
-3. **Filter**: Apply filters for sports, countries, or events
-4. **Sign In**: Create an account with email/password to contribute
-5. **User Settings**: Configure timezone and time format preferences (12h/24h)
-6. **Add Broadcasts**: When signed in, add broadcast channels for matches
-7. **Vote**: Help the community by voting on broadcast accuracy
-8. **View Sources**: See whether broadcasts are user-contributed or auto-fetched
+1. **Browse Matches**: View sports matches organized by date (Today/Tomorrow)
+2. **Search**: Find specific teams or leagues
+3. **Filter**: Apply filters for sports, countries, events, or match status
+4. **Sign In**: Sign in with Google to contribute
+5. **Settings**: Configure timezone and time format (12h/24h)
+6. **Add Broadcasts**: Contribute broadcast channels for matches
+7. **Vote**: Upvote/downvote broadcast accuracy
+8. **View Sources**: See whether broadcasts are auto-fetched or user-contributed
 
 ### For Admins
 
 1. Sign in with an admin account
-2. Access the Admin panel from the header
-3. Import match data in bulk (JSON format)
-4. View and manage existing data
-5. Use API response examples from `api-response-examples/` directory for testing
+2. Access the Admin panel (shield icon in header)
+3. **Import tab**: Paste TheSportsDB JSON to import fixtures or broadcasts
+4. **Manage tab**: Fetch fixtures/broadcasts on demand, cleanup old data
+5. **Fixtures tab**: View, search, and delete fixtures
+6. **Users tab**: View users, ban/unban with reason
+7. **Logs tab**: View API fetch logs and admin action logs
 
-## Database Schema
+## Database
 
 ### Tables
 
-- **matches**: Sports match information (teams, league, date, time, status)
-- **broadcasts**: Broadcasting channels by country for each match (with source tracking)
-- **votes**: Community votes on broadcast accuracy
-- **auth_users**: User authentication and profiles (Supabase Auth integration)
-- **user_preferences**: User timezone and time format preferences
+| Table | Purpose |
+|-------|---------|
+| `matches` | Sports fixtures (team, league, date, time, sport) |
+| `broadcasts` | TV channels per match (with source: thesportsdb/user) |
+| `votes` | Community upvotes/downvotes on broadcasts |
+| `user_profiles` | User display names, avatars, preferences (JSONB) |
+| `api_fetch_logs` | History of automated data fetches |
+| `admin_action_logs` | Admin activity audit trail |
 
-For detailed schema information, see [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md)
+For detailed schema, see [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md).
 
 ## Configuration
 
-### Adding Sports
+### Supported Countries (23)
 
-Edit `src/config/constants.js`:
-```javascript
-export const SPORT_COLORS = {
-  Football: { accent: "#00e5ff", bg: "rgba(0,229,255,0.12)", glow: "rgba(0,229,255,0.25)" },
-  Basketball: { accent: "#ff9f1c", bg: "rgba(255,159,28,0.12)", glow: "rgba(255,159,28,0.25)" },
-  // Add your sport here
-}
-```
+USA, UK, Canada, Australia, India, Germany, France, Spain, Italy, China, Turkey, Greece, Lithuania, Serbia, Russia, Argentina, Brazil, Mexico, Japan, Global, and more.
 
-### Adding Countries
+Each country has predefined broadcast channel lists. Edit `src/config/constants.js` to add countries or channels.
 
-Edit `src/config/constants.js`:
-```javascript
-export const CHANNELS_BY_COUNTRY = {
-  "USA": ["ESPN", "FOX", "CBS", ...],
-  // Add your country here
-}
+### Sport Colors & Durations
 
-export const FLAG_MAP = {
-  USA: "🇺🇸",
-  // Add your country emoji here
-}
-```
+Sport-specific match durations (for status calculation) and UI color schemes are defined in `src/config/sports.js`. Sports are dynamically fetched from TheSportsDB.
 
 ## Development
 
 ### Available Scripts
 
-- `npm run dev` - Start development server
+- `npm run dev` - Start development server (port 3000)
 - `npm run build` - Build for production
 - `npm run preview` - Preview production build
+
+### GitHub Actions
+
+- **deploy.yml**: Auto-deploys to GitHub Pages on push to `main`
+- **fetch-all-sports.yml**: Manual workflow to fetch fixtures
+- **fetch-broadcasts.yml**: Manual workflow to fetch broadcasts
+- **cleanup-old-data.yml**: Manual workflow to cleanup old data
+
+Required secrets: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `PROJECT_URL`, `SERVICE_ROLE_KEY`
 
 ### Code Style
 
 - React functional components with hooks
-- Inline CSS-in-JS styling
-- No TypeScript (JavaScript with JSX)
-- ESLint not configured (follows React best practices)
-
-## Contributing
-
-Contributions are welcome! This is a community-driven project.
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
+- Inline CSS-in-JS styling (dark theme, glassmorphism)
+- JavaScript with JSX (no TypeScript in frontend)
+- TypeScript in Supabase Edge Functions (Deno runtime)
 
 ## Roadmap
 
 ### Completed
-- [x] User authentication with Supabase Auth
+- [x] Google OAuth authentication
 - [x] User preferences (timezone, time format)
 - [x] Timezone-aware match time display
-- [x] Broadcast source tracking (user vs auto-fetched)
+- [x] Broadcast source tracking (auto vs user)
+- [x] Real-time updates via Supabase subscriptions
+- [x] Automated data fetching (TheSportsDB API)
+- [x] pg_cron scheduling (fixtures hourly, broadcasts every 15 min)
+- [x] 13+ sports support
+- [x] Admin panel (import, manage, fixtures, users, logs)
+- [x] Optimistic UI updates for votes
+- [x] Automated cleanup of past data
+- [x] GitHub Pages deployment
 
 ### Future Enhancements
-- [ ] Real-time updates via Supabase subscriptions
 - [ ] User contribution history and profiles
-- [ ] API integration for automated broadcast data
-- [ ] More sports support (Tennis, Rugby, Cricket, etc.)
 - [ ] Calendar integration and iCal export
 - [ ] Notifications for favorite teams
 - [ ] Mobile app (React Native)
@@ -195,16 +213,13 @@ This project is open source and available under the MIT License.
 ## Support
 
 For issues, questions, or suggestions:
-- Create an issue in the repository
-- Check [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) for detailed documentation
+- Create an issue in the [repository](https://github.com/davidcourtneypower/broadcast-finder/issues)
+- Check [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) for detailed technical documentation
 
 ## Acknowledgments
 
-- Built with React and Vite
-- Powered by Supabase
+- Built with [React](https://react.dev) and [Vite](https://vite.dev)
+- Powered by [Supabase](https://supabase.com)
+- Sports data from [TheSportsDB](https://www.thesportsdb.com)
 - Icons: Custom SVG implementation
 - Design: Dark theme with glassmorphism effects
-
----
-
-**Made with ⚽ for sports fans worldwide**
