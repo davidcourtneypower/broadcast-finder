@@ -163,6 +163,8 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
         let matched = 0
         let unmatched = 0
         let inserted = 0
+        let skipped = 0
+        const errors = []
 
         for (const tv of tvevents) {
           if (!tv.idEvent) {
@@ -189,9 +191,24 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
           const country = tv.strCountry || 'Global'
 
           for (const channel of stations) {
+            // Check if broadcast already exists
+            const { data: existingList } = await supabase
+              .from('broadcasts')
+              .select('id')
+              .eq('match_id', match.id)
+              .eq('channel', channel)
+              .eq('country', country)
+              .limit(1)
+
+            if (existingList && existingList.length > 0) {
+              skipped++
+              continue
+            }
+
+            // Insert new broadcast
             const { error: insertError } = await supabase
               .from('broadcasts')
-              .upsert({
+              .insert({
                 match_id: match.id,
                 channel,
                 country,
@@ -199,18 +216,27 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
                 source_id: tv.idEvent,
                 confidence_score: 100,
                 created_by: 'system'
-              }, { onConflict: 'match_id,channel,country,source' })
+              })
 
-            if (!insertError) inserted++
+            if (insertError) {
+              errors.push(`${channel}: ${insertError.message}`)
+            } else {
+              inserted++
+            }
           }
         }
 
         if (matched === 0 && unmatched > 0) {
           setError(`No matching fixtures found for ${unmatched} TV events. Import fixtures first.`)
+        } else if (errors.length > 0) {
+          setError(`Errors: ${errors.slice(0, 3).join(', ')}${errors.length > 3 ? ` (+${errors.length - 3} more)` : ''}`)
+        } else if (inserted === 0 && skipped === 0 && matched > 0) {
+          setError(`Matched ${matched} fixtures but found no TV stations in data. Check strTVStation field.`)
         } else {
-          setSuccess(`Linked ${inserted} broadcasts to ${matched} fixtures (${unmatched} unmatched)`)
+          const skipMsg = skipped > 0 ? `, ${skipped} skipped (duplicates)` : ''
+          setSuccess(`Linked ${inserted} broadcasts to ${matched} fixtures${skipMsg}`)
           await logAdminAction('broadcasts_imported', {
-            extraData: { matched, unmatched, inserted, source: 'thesportsdb_json' }
+            extraData: { matched, unmatched, inserted, skipped, source: 'thesportsdb_json' }
           })
           setTimeout(() => { onUpdate() }, 1500)
         }
