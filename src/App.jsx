@@ -499,29 +499,8 @@ function App() {
       if (dateTab === "Today" && m.match_date !== todayStr) return false
       if (dateTab === "Tomorrow" && m.match_date !== tomorrowStr) return false
 
-      // Hide finished fixtures older than 3 hours
-      const matchStatus = getMatchStatus(m.match_date, m.match_time, m.sport)
-      if (matchStatus === "finished") {
-        try {
-          // Handle time format - could be HH:MM or HH:MM:SS
-          let timeStr = m.match_time.trim()
-          if (timeStr.split(':').length === 2) {
-            timeStr = `${timeStr}:00`
-          }
-          const matchDateTime = new Date(`${m.match_date}T${timeStr}Z`)
-          if (!isNaN(matchDateTime.getTime())) {
-            const now = new Date()
-            const hoursAgo = (now - matchDateTime) / (1000 * 60 * 60)
-            // Hide if finished more than 3 hours ago
-            if (hoursAgo > 3) {
-              return false
-            }
-          }
-        } catch (error) {
-          // If date parsing fails, show the match (fail-safe)
-          console.error('Error parsing match time for filtering:', error)
-        }
-      }
+      // Hide finished fixtures from previous days
+      if (m.match_date < todayStr) return false
 
       if (hasActiveFilters) {
         if (filters.sports?.length > 0 && !filters.sports.includes(m.sport)) return false
