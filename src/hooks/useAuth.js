@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../config/supabase'
 
 export const useAuth = () => {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [session, setSession] = useState(null)
+  const currentUserIdRef = useRef(null)
 
   // Create or update user profile when user signs in
   const ensureUserProfile = async (user) => {
@@ -44,8 +45,6 @@ export const useAuth = () => {
 
         if (insertError) {
           console.error('Error creating user profile:', insertError)
-        } else {
-          console.log('User profile created successfully')
         }
       } else {
         // Update existing profile with latest info from OAuth provider
@@ -71,9 +70,11 @@ export const useAuth = () => {
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
-      setUser(session?.user ?? null)
-      if (session?.user) {
-        ensureUserProfile(session.user)
+      const newUser = session?.user ?? null
+      currentUserIdRef.current = newUser?.id ?? null
+      setUser(newUser)
+      if (newUser) {
+        ensureUserProfile(newUser)
       }
       setLoading(false)
     })
@@ -83,9 +84,17 @@ export const useAuth = () => {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
-      setUser(session?.user ?? null)
-      if (session?.user) {
-        ensureUserProfile(session.user)
+      const newUser = session?.user ?? null
+      const newUserId = newUser?.id ?? null
+
+      // Only update user state if user ID actually changed (sign in/out)
+      // This prevents re-renders on TOKEN_REFRESHED events (e.g. tab switch)
+      if (newUserId !== currentUserIdRef.current) {
+        currentUserIdRef.current = newUserId
+        setUser(newUser)
+        if (newUser) {
+          ensureUserProfile(newUser)
+        }
       }
       setLoading(false)
     })

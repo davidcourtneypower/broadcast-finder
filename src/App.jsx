@@ -195,8 +195,6 @@ function App() {
       .on('postgres_changes',
         { event: '*', schema: 'public', table: 'votes' },
         async (payload) => {
-          console.log('Vote change:', payload)
-
           // Get the broadcast ID from the payload
           const broadcastId = payload.new?.broadcast_id || payload.old?.broadcast_id
           if (!broadcastId) return
@@ -284,15 +282,29 @@ function App() {
         .eq("broadcast_id", broadcastId)
         .eq("user_id_uuid", user.id)
 
-      if (fetchError) {
-        console.error('Error fetching vote:', fetchError)
-        return
+      if (fetchError) return
+
+      // Helper to optimistically update vote stats in state
+      const updateVoteStats = (newMyVote, upDelta, downDelta) => {
+        setMatches(prev => prev.map(m => ({
+          ...m,
+          broadcasts: m.broadcasts.map(b => {
+            if (b.id !== broadcastId) return b
+            return {
+              ...b,
+              voteStats: {
+                up: (b.voteStats?.up || 0) + upDelta,
+                down: (b.voteStats?.down || 0) + downDelta,
+                myVote: newMyVote
+              }
+            }
+          })
+        })))
       }
 
-      let dbError = null
-
       if (existing && existing.length > 0) {
-        if (existing[0].vote_type === voteType) {
+        const oldVote = existing[0].vote_type
+        if (oldVote === voteType) {
           // Toggle off: remove vote
           const { error } = await supabase
             .from("votes")
@@ -300,30 +312,35 @@ function App() {
             .eq("broadcast_id", broadcastId)
             .eq("user_id_uuid", user.id)
 
-          dbError = error
+          if (!error) {
+            updateVoteStats(null, oldVote === 'up' ? -1 : 0, oldVote === 'down' ? -1 : 0)
+          }
         } else {
-          // Change vote: delete old and insert new (avoids UPDATE event issues with replica identity)
+          // Change vote: delete old and insert new
           const { error: deleteError } = await supabase
             .from("votes")
             .delete()
             .eq("broadcast_id", broadcastId)
             .eq("user_id_uuid", user.id)
 
-          if (deleteError) {
-            console.error('Error deleting old vote:', deleteError)
-            return
-          }
+          if (deleteError) return
 
           const { error: insertError } = await supabase
             .from("votes")
             .insert([{
               broadcast_id: broadcastId,
               user_id_uuid: user.id,
-              user_id: user.id, // Keep legacy field for compatibility
+              user_id: user.id,
               vote_type: voteType
             }])
 
-          dbError = insertError
+          if (!insertError) {
+            updateVoteStats(
+              voteType,
+              (voteType === 'up' ? 1 : 0) - (oldVote === 'up' ? 1 : 0),
+              (voteType === 'down' ? 1 : 0) - (oldVote === 'down' ? 1 : 0)
+            )
+          }
         }
       } else {
         // New vote: insert
@@ -332,33 +349,22 @@ function App() {
           .insert([{
             broadcast_id: broadcastId,
             user_id_uuid: user.id,
-            user_id: user.id, // Keep legacy field for compatibility
+            user_id: user.id,
             vote_type: voteType
           }])
 
-        dbError = error
+        if (!error) {
+          updateVoteStats(voteType, voteType === 'up' ? 1 : 0, voteType === 'down' ? 1 : 0)
+        }
       }
-
-      if (dbError) {
-        console.error('Error updating vote:', dbError)
-        return
-      }
-
-      // Real-time subscription will handle updating the state
-      // No optimistic update needed - rely on real-time for consistency
 
     } catch (error) {
-      console.error('Unexpected error in handleVote:', error)
+      // Silently fail - user can retry
     }
   }
 
   const handleDeleteBroadcast = async (broadcastId) => {
-    if (!user) {
-      console.error('No user found for delete operation')
-      return
-    }
-
-    console.log('Attempting to delete broadcast:', broadcastId, 'isAdmin:', isAdmin)
+    if (!user) return
 
     try {
       // Delete the broadcast (votes will be cascade deleted if FK constraint exists)
@@ -373,19 +379,25 @@ function App() {
         query = query.eq("created_by_uuid", user.id)
       }
 
-      const { data, error } = await query
+      const { data, error } = await query.select()
 
       if (error) {
-        console.error('Error deleting broadcast:', error)
         alert(`Failed to delete broadcast: ${error.message}`)
         return
       }
 
-      console.log('Broadcast deleted successfully:', data)
-      // Real-time subscription will handle removing from state
+      if (!data || data.length === 0) {
+        alert('Could not delete this broadcast. You may not have permission.')
+        return
+      }
+
+      // Optimistically remove from state (realtime subscription is a backup)
+      setMatches(prev => prev.map(m => ({
+        ...m,
+        broadcasts: m.broadcasts.filter(b => b.id !== broadcastId)
+      })))
 
     } catch (error) {
-      console.error('Unexpected error in handleDeleteBroadcast:', error)
       alert(`Unexpected error: ${error.message}`)
     }
   }
