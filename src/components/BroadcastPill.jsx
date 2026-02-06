@@ -109,7 +109,7 @@ export const BroadcastPill = ({ broadcast, voteStats, user, onVote, onRequestAut
       {showConfirm && (
         <ConfirmModal
           title="Delete Broadcast"
-          message={`Are you sure you want to delete the broadcast "${broadcast.channel}" (${broadcast.country})?`}
+          message={`Are you sure you want to delete this broadcast? This will also delete all associated votes. This action cannot be undone.`}
           confirmText="Delete"
           confirmColor="#e53935"
           onConfirm={() => onDelete(broadcast.id)}
