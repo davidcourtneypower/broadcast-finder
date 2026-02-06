@@ -15,7 +15,7 @@ export const BroadcastPill = ({ broadcast, voteStats, user, onVote, onRequestAut
 
   // Determine source type and styling
   const isAutomatic = broadcast.source && broadcast.source !== 'user'
-  const sourceLabel = isAutomatic ? '🤖' : '👤'
+  const sourceLabel = isAutomatic ? '🤖 Auto' : '👤 User'
   const sourceColor = isAutomatic ? '#00e5ff' : '#9c27b0'
   const sourceBg = isAutomatic ? 'rgba(0,229,255,0.12)' : 'rgba(156,39,176,0.12)'
 
@@ -39,28 +39,29 @@ export const BroadcastPill = ({ broadcast, voteStats, user, onVote, onRequestAut
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6, background: "rgba(255,255,255,0.04)", borderRadius: 6, padding: "6px 10px", border: "1px solid rgba(255,255,255,0.08)" }}>
-      {/* Top row: Country flag, name, channel, and source indicator */}
+      {/* Top row: Country flag, name, and channel */}
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <span style={{ fontSize: 15, flexShrink: 0 }}>{getFlag(broadcast.country)}</span>
         <span style={{ color: "#aaa", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>{broadcast.country}</span>
         <span style={{ color: "#444" }}>·</span>
         <span style={{ color: "#fff", fontSize: 13, fontWeight: 500 }}>{broadcast.channel}</span>
+      </div>
+
+      {/* Bottom row: Source indicator on left, vote buttons and delete button on right */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "space-between" }}>
         <span
           style={{
             fontSize: 10,
             color: sourceColor,
             background: sourceBg,
-            padding: "1px 5px",
+            padding: "2px 6px",
             borderRadius: 3,
-            flexShrink: 0
+            fontWeight: 500
           }}
         >
           {sourceLabel}
         </span>
-      </div>
-
-      {/* Bottom row: Vote buttons and delete button - always on new line, aligned right */}
-      <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         {isCreator ? (
           <>
             {/* Creator sees their locked upvote and downvote count (non-interactive) */}
@@ -94,12 +95,13 @@ export const BroadcastPill = ({ broadcast, voteStats, user, onVote, onRequestAut
             </button>
           </>
         )}
-        {/* Delete button for creators or admins */}
-        {canDelete && (
-          <button onClick={handleDelete} style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(244,67,54,0.15)", border: "1px solid rgba(244,67,54,0.4)", borderRadius: 4, padding: "3px 7px", cursor: "pointer", color: "#e57373", minWidth: 30 }} title="Delete this broadcast">
-            <Icon name="x" size={11} />
-          </button>
-        )}
+          {/* Delete button for creators or admins */}
+          {canDelete && (
+            <button onClick={handleDelete} style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(244,67,54,0.15)", border: "1px solid rgba(244,67,54,0.4)", borderRadius: 4, padding: "3px 7px", cursor: "pointer", color: "#e57373", minWidth: 30 }} title="Delete this broadcast">
+              <Icon name="x" size={11} />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )
