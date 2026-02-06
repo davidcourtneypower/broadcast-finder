@@ -6,7 +6,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { TheSportsDBv2Client } from '../fetch-all-sports/_shared/thesportsdb-v2-client.ts';
+import { TheSportsDBv2Client } from './_shared/thesportsdb-v2-client.ts';
 
 interface BroadcastInsert {
   match_id: string;
@@ -168,6 +168,12 @@ serve(async (req) => {
         // Collect all broadcasts for batch insert
         const allBroadcasts: BroadcastInsert[] = [];
 
+        // Log sample TV event IDs for debugging
+        if (tvEvents.length > 0) {
+          const sampleIds = tvEvents.slice(0, 5).map(e => e.idEvent).join(', ');
+          console.log(`Sample TV event IDs: ${sampleIds}`);
+        }
+
         // Process each TV event
         for (const tvEvent of tvEvents) {
           if (!tvEvent.idEvent) {
@@ -175,19 +181,29 @@ serve(async (req) => {
             continue;
           }
 
-          // Direct lookup by TheSportsDB event ID
-          const { data: match, error: matchError } = await supabase
+          // Direct lookup by TheSportsDB event ID (use limit(1) to avoid single() errors)
+          const { data: matches, error: matchError } = await supabase
             .from('matches')
-            .select('id')
+            .select('id, sportsdb_event_id')
             .eq('sportsdb_event_id', tvEvent.idEvent)
-            .single();
+            .limit(1);
 
-          if (matchError || !match) {
+          if (matchError) {
+            console.error(`Query error for event ${tvEvent.idEvent}: ${matchError.message}`);
             totalUnmatched++;
-            console.log(`No match found for event ${tvEvent.idEvent}: ${tvEvent.strEvent}`);
             continue;
           }
 
+          if (!matches || matches.length === 0) {
+            totalUnmatched++;
+            // Only log first few unmatched to avoid log spam
+            if (totalUnmatched <= 5) {
+              console.log(`No match found for event ${tvEvent.idEvent}: ${tvEvent.strEvent}`);
+            }
+            continue;
+          }
+
+          const match = matches[0];
           totalMatched++;
 
           // Parse TV stations
