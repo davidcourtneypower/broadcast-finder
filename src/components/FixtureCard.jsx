@@ -8,6 +8,7 @@ export const FixtureCard = ({ match, user, onVote, onRequestAuth, onAddBroadcast
   const [expanded, setExpanded] = useState(false)
   const [relativeTime, setRelativeTime] = useState('')
   const [sortBy, setSortBy] = useState('votes')
+  const [sortAsc, setSortAsc] = useState(false)
   const col = getSportColors ? getSportColors(match.sport) : { accent: "#00e5ff", bg: "rgba(0,229,255,0.12)", glow: "rgba(0,229,255,0.25)" }
 
   // Use user preferences for timezone conversion
@@ -129,35 +130,55 @@ export const FixtureCard = ({ match, user, onVote, onRequestAuth, onAddBroadcast
                 { key: 'votes', label: 'Votes' },
                 { key: 'country', label: 'Country' },
                 { key: 'channel', label: 'Channel' },
-              ].map(opt => (
-                <button
-                  key={opt.key}
-                  onClick={() => setSortBy(opt.key)}
-                  style={{
-                    padding: "3px 8px",
-                    borderRadius: 4,
-                    border: `1px solid ${sortBy === opt.key ? "rgba(0,229,255,0.4)" : "rgba(255,255,255,0.08)"}`,
-                    background: sortBy === opt.key ? "rgba(0,229,255,0.1)" : "rgba(255,255,255,0.03)",
-                    color: sortBy === opt.key ? "#00e5ff" : "#666",
-                    fontSize: 10,
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    fontFamily: "monospace",
-                  }}
-                >
-                  {opt.label}
-                </button>
-              ))}
+              ].map(opt => {
+                const isActive = sortBy === opt.key
+                return (
+                  <button
+                    key={opt.key}
+                    onClick={() => {
+                      if (isActive) {
+                        setSortAsc(prev => !prev)
+                      } else {
+                        setSortBy(opt.key)
+                        setSortAsc(opt.key === 'votes' ? false : true)
+                      }
+                    }}
+                    style={{
+                      padding: "3px 8px",
+                      borderRadius: 4,
+                      border: `1px solid ${isActive ? "rgba(0,229,255,0.4)" : "rgba(255,255,255,0.08)"}`,
+                      background: isActive ? "rgba(0,229,255,0.1)" : "rgba(255,255,255,0.03)",
+                      color: isActive ? "#00e5ff" : "#666",
+                      fontSize: 10,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      fontFamily: "monospace",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 3,
+                    }}
+                  >
+                    {opt.label}
+                    {isActive && <Icon name={sortAsc ? "sortAsc" : "sortDesc"} size={10} color="#00e5ff" />}
+                  </button>
+                )
+              })}
             </div>
           )}
           {match.broadcasts && match.broadcasts.length > 0 ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }}>
               {[...match.broadcasts].sort((a, b) => {
-                if (sortBy === 'country') return (a.country || '').localeCompare(b.country || '')
-                if (sortBy === 'channel') return (a.channel || '').localeCompare(b.channel || '')
-                const aNet = (a.voteStats?.up || 0) - (a.voteStats?.down || 0)
-                const bNet = (b.voteStats?.up || 0) - (b.voteStats?.down || 0)
-                return bNet - aNet
+                let result
+                if (sortBy === 'country') {
+                  result = (a.country || '').localeCompare(b.country || '')
+                } else if (sortBy === 'channel') {
+                  result = (a.channel || '').localeCompare(b.channel || '')
+                } else {
+                  const aNet = (a.voteStats?.up || 0) - (a.voteStats?.down || 0)
+                  const bNet = (b.voteStats?.up || 0) - (b.voteStats?.down || 0)
+                  result = bNet - aNet
+                }
+                return sortAsc ? -result : result
               }).map(b => (
                 <BroadcastPill
                   key={b.id}

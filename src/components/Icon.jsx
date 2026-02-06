@@ -24,6 +24,8 @@ const icons = {
   download: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3",
   list: "M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01",
   check: "M20 6L9 17l-5-5",
+  sortAsc: "M12 5v14M5 12l7 7 7-7",
+  sortDesc: "M12 19V5M5 12l7-7 7 7",
 }
 
 export const Icon = ({ name, size = 16, color = "currentColor", style = {} }) => {
