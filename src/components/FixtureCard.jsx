@@ -123,37 +123,20 @@ export const FixtureCard = ({ match, user, onVote, onRequestAuth, onAddBroadcast
       {expanded && (
         <div style={{ padding: "8px 12px", background: "rgba(0,0,0,0.2)", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
           {match.broadcasts && match.broadcasts.length > 0 ? (
-            <>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }}>
-                {match.broadcasts.map(b => (
-                  <BroadcastPill
-                    key={b.id}
-                    broadcast={b}
-                    voteStats={b.voteStats || {}}
-                    user={user}
-                    onVote={onVote}
-                    onRequestAuth={onRequestAuth}
-                    onDelete={onDeleteBroadcast}
-                    isAdmin={isAdmin}
-                  />
-                ))}
-              </div>
-              {/* Show source attribution if any auto-fetched data */}
-              {match.broadcasts.some(b => b.source && b.source !== 'user') && (
-                <div style={{
-                  fontSize: 9,
-                  color: "#555",
-                  textAlign: "center",
-                  marginBottom: 8,
-                  fontFamily: "monospace",
-                  padding: "4px 8px",
-                  background: "rgba(0,229,255,0.05)",
-                  borderRadius: 4
-                }}>
-                  🔍 Auto-fetched data · Help verify by voting
-                </div>
-              )}
-            </>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }}>
+              {match.broadcasts.map(b => (
+                <BroadcastPill
+                  key={b.id}
+                  broadcast={b}
+                  voteStats={b.voteStats || {}}
+                  user={user}
+                  onVote={onVote}
+                  onRequestAuth={onRequestAuth}
+                  onDelete={onDeleteBroadcast}
+                  isAdmin={isAdmin}
+                />
+              ))}
+            </div>
           ) : (
             <div style={{ textAlign: "center", padding: "12px 0", marginBottom: 8 }}>
               <div style={{ fontSize: 11, color: "#555" }}>No broadcast info yet</div>
@@ -166,9 +149,9 @@ export const FixtureCard = ({ match, user, onVote, onRequestAuth, onAddBroadcast
                 width: "100%",
                 padding: "8px 0",
                 borderRadius: 6,
-                border: "1px solid rgba(0,229,255,0.3)",
-                background: "rgba(0,229,255,0.1)",
-                color: "#00e5ff",
+                border: `1px solid ${col.accent}40`,
+                background: col.bg,
+                color: col.accent,
                 fontSize: 11,
                 fontWeight: 600,
                 cursor: "pointer",

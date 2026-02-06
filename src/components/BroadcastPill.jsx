@@ -13,11 +13,8 @@ export const BroadcastPill = ({ broadcast, voteStats, user, onVote, onRequestAut
   // Can delete if user is creator or admin
   const canDelete = isCreator || isAdmin
 
-  // Determine source type and styling
+  // Determine source type
   const isAutomatic = broadcast.source && broadcast.source !== 'user'
-  const sourceLabel = isAutomatic ? '🤖 Auto' : '👤 User'
-  const sourceColor = isAutomatic ? '#00e5ff' : '#9c27b0'
-  const sourceBg = isAutomatic ? 'rgba(0,229,255,0.12)' : 'rgba(156,39,176,0.12)'
 
   const handleVote = (dir) => {
     if (!user) {
@@ -38,36 +35,17 @@ export const BroadcastPill = ({ broadcast, voteStats, user, onVote, onRequestAut
   }
 
   return (
-    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px 8px", background: "rgba(255,255,255,0.04)", borderRadius: 6, padding: "6px 10px", border: "1px solid rgba(255,255,255,0.08)" }}>
-      {/* Country flag and name */}
-      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, background: "rgba(255,255,255,0.04)", borderRadius: 6, padding: "6px 10px", border: "1px solid rgba(255,255,255,0.08)" }}>
+      {/* Top row: Country flag, name, and channel */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <span style={{ fontSize: 15, flexShrink: 0 }}>{getFlag(broadcast.country)}</span>
         <span style={{ color: "#aaa", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>{broadcast.country}</span>
-      </div>
-
-      {/* Channel/Service name and source badge */}
-      <div style={{ display: "flex", alignItems: "center", gap: 4, flex: "1 1 auto", minWidth: "fit-content" }}>
+        <span style={{ color: "#444" }}>·</span>
         <span style={{ color: "#fff", fontSize: 13, fontWeight: 500 }}>{broadcast.channel}</span>
-        <span
-          style={{
-            fontSize: 8,
-            fontFamily: "monospace",
-            color: sourceColor,
-            background: sourceBg,
-            padding: "1px 4px",
-            borderRadius: 3,
-            fontWeight: 600,
-            letterSpacing: 0.3,
-            flexShrink: 0
-          }}
-          title={isAutomatic ? `Auto-scraped from ${broadcast.source}` : 'User contributed'}
-        >
-          {sourceLabel}
-        </span>
       </div>
 
-      {/* Vote buttons and delete button */}
-      <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, marginLeft: "auto" }}>
+      {/* Bottom row: Vote buttons and delete button - always on new line, aligned right */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
         {isCreator ? (
           <>
             {/* Creator sees their locked upvote and downvote count (non-interactive) */}
