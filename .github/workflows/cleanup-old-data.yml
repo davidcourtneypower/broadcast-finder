@@ -1,0 +1,14 @@
+name: Cleanup Old Data
+
+on:
+  workflow_dispatch:
+
+jobs:
+  cleanup-old-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cleanup Old Data
+        run: |
+          curl -X POST "${{ secrets.PROJECT_URL }}/functions/v1/cleanup-old-data" \
+            -H "Authorization: Bearer ${{ secrets.SERVICE_ROLE_KEY }}" \
+            -H "Content-Type: application/json"

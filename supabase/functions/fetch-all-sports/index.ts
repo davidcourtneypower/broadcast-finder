@@ -78,10 +78,13 @@ serve(async (req) => {
     const today = new Date();
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
+    const dayAfterTomorrow = new Date(today);
+    dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 2);
 
     const dateMap: Record<string, string> = {
       'today': today.toISOString().split('T')[0],
-      'tomorrow': tomorrow.toISOString().split('T')[0]
+      'tomorrow': tomorrow.toISOString().split('T')[0],
+      'day_after_tomorrow': dayAfterTomorrow.toISOString().split('T')[0]
     };
 
     const datesToFetch = dates
