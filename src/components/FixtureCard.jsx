@@ -7,6 +7,7 @@ import { getTimezoneAbbreviation } from '../utils/timeFormatting'
 export const FixtureCard = ({ match, user, onVote, onRequestAuth, onAddBroadcast, onDeleteBroadcast, isAdmin, getSportColors, getFlag }) => {
   const [expanded, setExpanded] = useState(false)
   const [relativeTime, setRelativeTime] = useState('')
+  const [sortBy, setSortBy] = useState('votes')
   const col = getSportColors ? getSportColors(match.sport) : { accent: "#00e5ff", bg: "rgba(0,229,255,0.12)", glow: "rgba(0,229,255,0.25)" }
 
   // Use user preferences for timezone conversion
@@ -121,9 +122,43 @@ export const FixtureCard = ({ match, user, onVote, onRequestAuth, onAddBroadcast
       </button>
       {expanded && (
         <div style={{ padding: "8px 12px", background: "rgba(0,0,0,0.2)", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+          {match.broadcasts && match.broadcasts.length > 1 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 8 }}>
+              <span style={{ fontSize: 9, color: "#555", fontFamily: "monospace", textTransform: "uppercase", letterSpacing: 0.5, marginRight: 2 }}>Sort</span>
+              {[
+                { key: 'votes', label: 'Votes' },
+                { key: 'country', label: 'Country' },
+                { key: 'channel', label: 'Channel' },
+              ].map(opt => (
+                <button
+                  key={opt.key}
+                  onClick={() => setSortBy(opt.key)}
+                  style={{
+                    padding: "3px 8px",
+                    borderRadius: 4,
+                    border: `1px solid ${sortBy === opt.key ? "rgba(0,229,255,0.4)" : "rgba(255,255,255,0.08)"}`,
+                    background: sortBy === opt.key ? "rgba(0,229,255,0.1)" : "rgba(255,255,255,0.03)",
+                    color: sortBy === opt.key ? "#00e5ff" : "#666",
+                    fontSize: 10,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    fontFamily: "monospace",
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
           {match.broadcasts && match.broadcasts.length > 0 ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }}>
-              {match.broadcasts.map(b => (
+              {[...match.broadcasts].sort((a, b) => {
+                if (sortBy === 'country') return (a.country || '').localeCompare(b.country || '')
+                if (sortBy === 'channel') return (a.channel || '').localeCompare(b.channel || '')
+                const aNet = (a.voteStats?.up || 0) - (a.voteStats?.down || 0)
+                const bNet = (b.voteStats?.up || 0) - (b.voteStats?.down || 0)
+                return bNet - aNet
+              }).map(b => (
                 <BroadcastPill
                   key={b.id}
                   broadcast={b}

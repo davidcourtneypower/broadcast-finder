@@ -68,7 +68,7 @@ const AccordionSection = ({ title, count, selectedItems, isOpen, onToggle, disab
       )}
     </button>
     {isOpen && !disabled && (
-      <div style={{
+      <div className="dark-scrollbar" style={{
         maxHeight: 180,
         overflowY: "auto",
         padding: "10px 12px",
@@ -237,7 +237,7 @@ export const FilterModal = ({ onClose, filters, onApply, allSports, matches, get
           </button>
         </div>
 
-        <div style={{ flex: 1, overflowY: "auto", marginBottom: 16 }}>
+        <div className="dark-scrollbar" style={{ flex: 1, overflowY: "auto", marginBottom: 16 }}>
           {/* Status */}
           <AccordionSection
             title="Status"

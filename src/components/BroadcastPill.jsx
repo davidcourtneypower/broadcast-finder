@@ -40,11 +40,13 @@ export const BroadcastPill = ({ broadcast, voteStats, user, onVote, onRequestAut
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6, background: "rgba(255,255,255,0.04)", borderRadius: 6, padding: "6px 10px", border: "1px solid rgba(255,255,255,0.08)" }}>
-      {/* Top row: Country flag, name, and channel */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      {/* Country row */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         <span style={{ fontSize: 15, flexShrink: 0 }}>{getFlag(broadcast.country)}</span>
         <span style={{ color: "#aaa", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>{broadcast.country}</span>
-        <span style={{ color: "#444" }}>·</span>
+      </div>
+      {/* Channel row */}
+      <div style={{ textAlign: "center" }}>
         <span style={{ color: "#fff", fontSize: 13, fontWeight: 500 }}>{broadcast.channel}</span>
       </div>
 
