@@ -55,7 +55,16 @@ function transformEvent(event: TheSportsDBEvent): MatchInsert | null {
   };
 }
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
 serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
   const startTime = Date.now();
 
   try {
@@ -221,7 +230,7 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify(response),
-      { headers: { 'Content-Type': 'application/json' } }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
@@ -254,7 +263,7 @@ serve(async (req) => {
         error: (error as Error).message,
         executionTimeMs: Date.now() - startTime
       }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
