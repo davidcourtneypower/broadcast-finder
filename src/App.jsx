@@ -133,8 +133,6 @@ function App() {
       .on('postgres_changes',
         { event: '*', schema: 'public', table: 'broadcasts' },
         async (payload) => {
-          console.log('Broadcast change:', payload)
-
           if (payload.eventType === 'INSERT') {
             // New broadcast added
             const newBroadcast = payload.new

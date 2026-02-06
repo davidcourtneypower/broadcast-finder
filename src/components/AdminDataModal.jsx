@@ -9,9 +9,9 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
   const [importing, setImporting] = useState(false)
-  const [fetching, setFetching] = useState(false)
+  const [fetchingFixtures, setFetchingFixtures] = useState(false)
+  const [fetchingBroadcasts, setFetchingBroadcasts] = useState(false)
   const [selectedDates, setSelectedDates] = useState(['today', 'tomorrow'])
-  const [fetchBroadcastsToo, setFetchBroadcastsToo] = useState(true)
   const [logs, setLogs] = useState([])
   const [loadingLogs, setLoadingLogs] = useState(false)
   const [fetchResult, setFetchResult] = useState(null)
@@ -279,20 +279,17 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
     setImporting(false)
   }
 
-  const handleFetch = async () => {
-    setFetching(true)
+  const handleFetchFixtures = async () => {
+    setFetchingFixtures(true)
     setError("")
     setSuccess("")
     setFetchResult(null)
-    setBroadcastResult(null)
 
     try {
       const { data: { session } } = await supabase.auth.getSession()
       const token = session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY
-
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 
-      // Step 1: Fetch fixtures
       const response = await fetch(`${supabaseUrl}/functions/v1/fetch-all-sports`, {
         method: 'POST',
         headers: {
@@ -306,36 +303,10 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
       })
 
       const result = await response.json()
+      setFetchResult(result)
 
       if (result.success || result.status === 'partial') {
-        setFetchResult(result)
-
-        // Step 2: Optionally fetch broadcasts
-        if (fetchBroadcastsToo) {
-          const broadcastResponse = await fetch(`${supabaseUrl}/functions/v1/fetch-broadcasts`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              dates: selectedDates,
-              trigger: 'manual'
-            })
-          })
-
-          const broadcastData = await broadcastResponse.json()
-          setBroadcastResult(broadcastData)
-
-          if (broadcastData.success || broadcastData.status === 'partial') {
-            setSuccess(`Fetched ${result.eventsFound} events across ${result.sportsFound} sports + ${broadcastData.broadcastsInserted} broadcasts!`)
-          } else {
-            setSuccess(`Fetched ${result.eventsFound} events across ${result.sportsFound} sports. Broadcasts failed: ${broadcastData.error || 'Unknown'}`)
-          }
-        } else {
-          setSuccess(`Successfully fetched ${result.eventsFound} events across ${result.sportsFound} sports!`)
-        }
-
+        setSuccess(`Fetched ${result.eventsFound} events across ${result.sportsFound} sports!`)
         setTimeout(() => { onUpdate() }, 1000)
       } else {
         setError("Fetch failed: " + (result.error || 'Unknown error'))
@@ -343,7 +314,45 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
     } catch (e) {
       setError("Error: " + e.message)
     }
-    setFetching(false)
+    setFetchingFixtures(false)
+  }
+
+  const handleFetchBroadcasts = async () => {
+    setFetchingBroadcasts(true)
+    setError("")
+    setSuccess("")
+    setBroadcastResult(null)
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/fetch-broadcasts`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          dates: selectedDates,
+          trigger: 'manual'
+        })
+      })
+
+      const result = await response.json()
+      setBroadcastResult(result)
+
+      if (result.success || result.status === 'partial') {
+        setSuccess(`Linked ${result.broadcastsInserted} broadcasts (${result.matched} matched, ${result.unmatched} unmatched)`)
+        setTimeout(() => { onUpdate() }, 1000)
+      } else {
+        setError("Broadcast fetch failed: " + (result.error || 'Unknown error'))
+      }
+    } catch (e) {
+      setError("Error: " + e.message)
+    }
+    setFetchingBroadcasts(false)
   }
 
   const handleCleanup = async () => {
@@ -812,7 +821,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
         <div style={{ display: "flex", gap: 4, marginBottom: 16, borderBottom: "1px solid #2a2a4a", paddingBottom: 0 }}>
           {[
             { id: 'import', label: 'Import', icon: 'upload' },
-            { id: 'fetch', label: 'Fetch', icon: 'download' },
+            { id: 'fetch', label: 'Manage', icon: 'download' },
             { id: 'fixtures', label: 'Fixtures', icon: 'calendar' },
             { id: 'users', label: 'Users', icon: 'shield' },
             { id: 'logs', label: 'Logs', icon: 'list' }
@@ -936,10 +945,6 @@ Example broadcasts:
 
           {activeTab === 'fetch' && (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <div style={{ fontSize: 11, color: "#888", lineHeight: 1.5 }}>
-                Manually fetch all sports fixtures and TV broadcasts from TheSportsDB. This will retrieve events for all sports on the selected dates.
-              </div>
-
               <div>
                 <div style={{ fontSize: 12, color: "#aaa", marginBottom: 8, fontWeight: 600 }}>Select Dates</div>
                 <div style={{ display: "flex", gap: 8 }}>
@@ -984,118 +989,83 @@ Example broadcasts:
                 </div>
               </div>
 
-              {/* Also fetch broadcasts toggle */}
-              <div
-                onClick={() => setFetchBroadcastsToo(!fetchBroadcastsToo)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  padding: "10px 12px",
-                  borderRadius: 8,
-                  border: fetchBroadcastsToo ? "1px solid rgba(0,229,255,0.3)" : "1px solid #2a2a4a",
-                  background: fetchBroadcastsToo ? "rgba(0,229,255,0.08)" : "rgba(255,255,255,0.02)",
-                  cursor: "pointer"
-                }}
-              >
-                <div style={{
-                  width: 18,
-                  height: 18,
-                  borderRadius: 4,
-                  border: fetchBroadcastsToo ? "2px solid #00e5ff" : "2px solid #444",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  background: fetchBroadcastsToo ? "#00e5ff" : "transparent",
-                  flexShrink: 0
-                }}>
-                  {fetchBroadcastsToo && <Icon name="check" size={12} color="#000" />}
-                </div>
-                <div>
-                  <div style={{ fontSize: 12, color: fetchBroadcastsToo ? "#00e5ff" : "#aaa", fontWeight: 600 }}>
-                    Also fetch TV broadcasts
-                  </div>
-                  <div style={{ fontSize: 10, color: "#666", marginTop: 2 }}>
-                    Link broadcast channels to fixtures from TheSportsDB
-                  </div>
-                </div>
-              </div>
-
-              {fetchResult && (
-                <div style={{
-                  padding: 12,
-                  background: getStatusBg(fetchResult.status),
-                  border: `1px solid ${getStatusBorder(fetchResult.status)}`,
-                  borderRadius: 8
-                }}>
-                  <div style={{ fontSize: 12, color: getStatusColor(fetchResult.status), marginBottom: 8, fontWeight: 600 }}>
-                    Fetch {fetchResult.status === 'success' ? 'Successful' : fetchResult.status === 'partial' ? 'Partially Successful' : 'Failed'}
-                  </div>
-                  <div style={{ fontSize: 11, color: "#aaa", lineHeight: 1.6 }}>
-                    • Found: {fetchResult.eventsFound} events<br />
-                    • Inserted: {fetchResult.eventsInserted} matches<br />
-                    • Sports: {fetchResult.sportsFound}<br />
-                    {fetchResult.sportStats && Object.keys(fetchResult.sportStats).length > 0 && (
-                      <div style={{ marginTop: 6, fontSize: 10 }}>
-                        {Object.entries(fetchResult.sportStats).slice(0, 5).map(([sport, stats]) => (
-                          <div key={sport}>• {sport}: {stats.eventsFound} events</div>
-                        ))}
-                        {Object.keys(fetchResult.sportStats).length > 5 && (
-                          <div>• ...and {Object.keys(fetchResult.sportStats).length - 5} more sports</div>
-                        )}
-                      </div>
-                    )}
-                    {fetchResult.errors && (
-                      <>
-                        • Errors: {fetchResult.errors.length}<br />
-                        <div style={{ fontSize: 10, color: "#e57373", marginTop: 8, fontFamily: "monospace" }}>
-                          {fetchResult.errors.join('\n')}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {broadcastResult && (
-                <div style={{
-                  padding: 12,
-                  background: getStatusBg(broadcastResult.status),
-                  border: `1px solid ${getStatusBorder(broadcastResult.status)}`,
-                  borderRadius: 8
-                }}>
-                  <div style={{ fontSize: 12, color: getStatusColor(broadcastResult.status), marginBottom: 8, fontWeight: 600 }}>
-                    Broadcasts {broadcastResult.status === 'success' ? 'Linked' : broadcastResult.status === 'partial' ? 'Partially Linked' : 'Failed'}
-                  </div>
-                  <div style={{ fontSize: 11, color: "#aaa", lineHeight: 1.6 }}>
-                    • TV Events Found: {broadcastResult.tvEventsFound}<br />
-                    • Matched: {broadcastResult.matched}<br />
-                    • Broadcasts Inserted: {broadcastResult.broadcastsInserted}
-                    {broadcastResult.unmatched > 0 && <><br />• Unmatched: {broadcastResult.unmatched}</>}
-                  </div>
-                </div>
-              )}
-
               {error && <div style={{ padding: 8, background: "rgba(244,67,54,0.15)", border: "1px solid rgba(244,67,54,0.3)", borderRadius: 6, color: "#e57373", fontSize: 11 }}>{error}</div>}
               {success && <div style={{ padding: 8, background: "rgba(76,175,80,0.15)", border: "1px solid rgba(76,175,80,0.3)", borderRadius: 6, color: "#81c784", fontSize: 11 }}>{success}</div>}
 
-              <button
-                onClick={handleFetch}
-                disabled={selectedDates.length === 0 || fetching}
-                style={{
-                  width: "100%",
-                  padding: "10px 0",
-                  borderRadius: 8,
-                  border: "none",
-                  background: selectedDates.length > 0 && !fetching ? "linear-gradient(135deg,#00e5ff,#7c4dff)" : "#2a2a4a",
-                  color: "#fff",
-                  fontSize: 14,
-                  fontWeight: 600,
-                  cursor: selectedDates.length > 0 && !fetching ? "pointer" : "not-allowed"
-                }}
-              >
-                {fetching ? "Fetching..." : `Fetch All Sports${fetchBroadcastsToo ? ' + Broadcasts' : ''}`}
-              </button>
+              {/* Fetch Fixtures */}
+              <div>
+                <div style={{ fontSize: 11, color: "#888", marginBottom: 8 }}>
+                  Fetch all sports fixtures from TheSportsDB for selected dates.
+                </div>
+                {fetchResult && (
+                  <div style={{
+                    padding: 12,
+                    marginBottom: 8,
+                    background: getStatusBg(fetchResult.status),
+                    border: `1px solid ${getStatusBorder(fetchResult.status)}`,
+                    borderRadius: 8
+                  }}>
+                    <div style={{ fontSize: 11, color: "#aaa", lineHeight: 1.6 }}>
+                      Found {fetchResult.eventsFound} events across {fetchResult.sportsFound} sports, inserted {fetchResult.eventsInserted}
+                    </div>
+                  </div>
+                )}
+                <button
+                  onClick={handleFetchFixtures}
+                  disabled={selectedDates.length === 0 || fetchingFixtures}
+                  style={{
+                    width: "100%",
+                    padding: "10px 0",
+                    borderRadius: 8,
+                    border: "none",
+                    background: selectedDates.length > 0 && !fetchingFixtures ? "linear-gradient(135deg,#00e5ff,#7c4dff)" : "#2a2a4a",
+                    color: "#fff",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: selectedDates.length > 0 && !fetchingFixtures ? "pointer" : "not-allowed"
+                  }}
+                >
+                  {fetchingFixtures ? "Fetching..." : "Fetch Fixtures"}
+                </button>
+              </div>
+
+              {/* Fetch Broadcasts */}
+              <div>
+                <div style={{ fontSize: 11, color: "#888", marginBottom: 8 }}>
+                  Fetch TV broadcast data and link to existing fixtures.
+                </div>
+                {broadcastResult && (
+                  <div style={{
+                    padding: 12,
+                    marginBottom: 8,
+                    background: getStatusBg(broadcastResult.status),
+                    border: `1px solid ${getStatusBorder(broadcastResult.status)}`,
+                    borderRadius: 8
+                  }}>
+                    <div style={{ fontSize: 11, color: "#aaa", lineHeight: 1.6 }}>
+                      Found {broadcastResult.tvEventsFound} TV events, matched {broadcastResult.matched}, inserted {broadcastResult.broadcastsInserted} broadcasts
+                      {broadcastResult.unmatched > 0 && `, ${broadcastResult.unmatched} unmatched`}
+                    </div>
+                  </div>
+                )}
+                <button
+                  onClick={handleFetchBroadcasts}
+                  disabled={selectedDates.length === 0 || fetchingBroadcasts}
+                  style={{
+                    width: "100%",
+                    padding: "10px 0",
+                    borderRadius: 8,
+                    border: "none",
+                    background: selectedDates.length > 0 && !fetchingBroadcasts ? "linear-gradient(135deg,#ff9f1c,#ff6d00)" : "#2a2a4a",
+                    color: "#fff",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: selectedDates.length > 0 && !fetchingBroadcasts ? "pointer" : "not-allowed"
+                  }}
+                >
+                  {fetchingBroadcasts ? "Fetching..." : "Fetch Broadcasts"}
+                </button>
+              </div>
 
               {/* Cleanup section */}
               <div style={{ borderTop: "1px solid #2a2a4a", paddingTop: 16 }}>
