@@ -148,17 +148,18 @@ function App() {
               voteStats: votesByBroadcast[b.id] || { up: 0, down: 0, myVote: null }
             }))
 
-          // Calculate status dynamically based on match time
-          const calculatedStatus = getMatchStatus(
-            m.match_date,
-            m.match_time,
-            m.sport
-          )
+          // Use DB status, with client-side "starting-soon" overlay
+          let displayStatus = m.status || 'upcoming'
+          if (displayStatus === 'upcoming') {
+            if (isStartingSoon(m.match_date, m.match_time)) {
+              displayStatus = 'starting-soon'
+            }
+          }
 
           return {
             ...m,
             broadcasts: mBroadcasts,
-            status: calculatedStatus
+            status: displayStatus
           }
         })
 
@@ -266,10 +267,42 @@ function App() {
       )
       .subscribe()
 
+    // Subscribe to matches status changes (for livescore updates)
+    const matchesChannel = supabase
+      .channel('matches-status-changes')
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'matches' },
+        (payload) => {
+          const updated = payload.new
+          if (!updated || !updated.id) return
+
+          setMatches(prev => prev.map(m => {
+            if (m.id !== updated.id) return m
+
+            // Apply starting-soon overlay on the new DB status
+            let displayStatus = updated.status || 'upcoming'
+            if (displayStatus === 'upcoming') {
+              if (isStartingSoon(updated.match_date || m.match_date, updated.match_time || m.match_time)) {
+                displayStatus = 'starting-soon'
+              }
+            }
+
+            return {
+              ...m,
+              status: displayStatus,
+              home_score: updated.home_score,
+              away_score: updated.away_score,
+            }
+          }))
+        }
+      )
+      .subscribe()
+
     // Cleanup subscriptions
     return () => {
       supabase.removeChannel(broadcastsChannel)
       supabase.removeChannel(votesChannel)
+      supabase.removeChannel(matchesChannel)
     }
   }, [user])
   
@@ -460,40 +493,45 @@ function App() {
     setDisplayLimit(20)
   }, [filters, search, dateTab])
 
+  // Periodically re-evaluate "starting-soon" for upcoming matches (every 60s)
+  // The livescore API only reports "NS" before a match, so starting-soon is client-side
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setMatches(prev => {
+        let changed = false
+        const updated = prev.map(m => {
+          if (m.status !== 'upcoming' && m.status !== 'starting-soon') return m
+          const startingSoon = isStartingSoon(m.match_date, m.match_time)
+          const newStatus = startingSoon ? 'starting-soon' : 'upcoming'
+          if (newStatus !== m.status) {
+            changed = true
+            return { ...m, status: newStatus }
+          }
+          return m
+        })
+        return changed ? updated : prev
+      })
+    }, 60000)
+
+    return () => clearInterval(timer)
+  }, [])
+
   const todayStr = getTodayStr()
   const tomorrowStr = getTomorrowStr()
   const hasActiveFilters = filters.sports?.length > 0 || filters.countries?.length > 0 || filters.events?.length > 0 || filters.statuses?.length > 0
 
-  // Sport-specific status calculation
-  const getMatchStatus = (matchDate, matchTime, sport) => {
+  // Check if a match is within 15 minutes of starting (for "starting-soon" overlay)
+  // This is client-side only since the livescore API only reports "NS" before kickoff
+  const isStartingSoon = (matchDate, matchTime) => {
     try {
-      // Handle time format - could be HH:MM or HH:MM:SS
       let timeStr = matchTime.trim()
-      if (timeStr.split(':').length === 2) {
-        timeStr = `${timeStr}:00`
-      }
-
+      if (timeStr.split(':').length === 2) timeStr = `${timeStr}:00`
       const matchDateTime = new Date(`${matchDate}T${timeStr}Z`)
-
-      // Check if date is valid
-      if (isNaN(matchDateTime.getTime())) {
-        return "upcoming"
-      }
-
-      const now = new Date()
-      const diffMinutes = (now - matchDateTime) / (1000 * 60)
-
-      // Get sport-specific configuration
-      const config = getSportConfig(sport)
-      const matchDuration = config?.matchDuration || 180
-      const pregameWindow = 15
-
-      if (diffMinutes < -pregameWindow) return "upcoming"
-      if (diffMinutes >= -pregameWindow && diffMinutes < 0) return "starting-soon"
-      if (diffMinutes >= 0 && diffMinutes <= matchDuration) return "live"
-      return "finished"
-    } catch (error) {
-      return "upcoming"
+      if (isNaN(matchDateTime.getTime())) return false
+      const diffMinutes = (matchDateTime - new Date()) / (1000 * 60)
+      return diffMinutes > 0 && diffMinutes <= 15
+    } catch {
+      return false
     }
   }
 
@@ -510,8 +548,7 @@ function App() {
         if (filters.countries?.length > 0 && !filters.countries.includes(m.country)) return false
         if (filters.events?.length > 0 && !filters.events.includes(m.league)) return false
         if (filters.statuses?.length > 0) {
-          const matchStatus = getMatchStatus(m.match_date, m.match_time, m.sport)
-          if (!filters.statuses.includes(matchStatus)) return false
+          if (!filters.statuses.includes(m.status)) return false
         }
       }
       if (search) {
@@ -524,15 +561,15 @@ function App() {
       return true
     })
 
-    // Always sort by: LIVE → STARTING-SOON → UPCOMING → FINISHED
+    // Always sort by: LIVE → STARTING-SOON → UPCOMING → FINISHED → CANCELLED
     // Within each status, sort by time (most recent live matches first, earliest upcoming matches first)
-    const statusOrder = { live: 0, "starting-soon": 1, upcoming: 2, finished: 3 }
+    const statusOrder = { live: 0, "starting-soon": 1, upcoming: 2, finished: 3, cancelled: 4 }
     result.sort((a, b) => {
-      const aStatus = getMatchStatus(a.match_date, a.match_time, a.sport)
-      const bStatus = getMatchStatus(b.match_date, b.match_time, b.sport)
+      const aStatus = a.status || 'upcoming'
+      const bStatus = b.status || 'upcoming'
 
       // First, sort by status
-      const statusDiff = statusOrder[aStatus] - statusOrder[bStatus]
+      const statusDiff = (statusOrder[aStatus] ?? 5) - (statusOrder[bStatus] ?? 5)
       if (statusDiff !== 0) return statusDiff
 
       // Within same status, sort by time
@@ -554,9 +591,9 @@ function App() {
     [...new Set(matches.map(m => m.sport))].sort(), [matches]
   )
 
-  // Calculate live count based on time (from filtered matches, excluding hidden finished ones)
+  // Calculate live count from DB status
   const liveCount = useMemo(() =>
-    filtered.filter(m => getMatchStatus(m.match_date, m.match_time, m.sport) === "live").length,
+    filtered.filter(m => m.status === "live").length,
     [filtered]
   )
 

@@ -13,8 +13,8 @@ export const FixtureCard = ({ match, user, onVote, onRequestAuth, onAddBroadcast
   // Format match time in user's timezone
   const { time: displayTime, dayLabel, fullDateTime } = formatTime(match.match_date, match.match_time)
 
-  // Calculate status in user's timezone
-  const matchStatus = getStatus(match.match_date, match.match_time, match.sport)
+  // Use DB-driven status (set by livescore edge function, with starting-soon overlay from App.jsx)
+  const matchStatus = match.status || 'upcoming'
   const isLive = matchStatus === "live"
 
   // Get timezone abbreviation for display

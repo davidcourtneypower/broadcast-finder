@@ -1,0 +1,15 @@
+name: Fetch Livescores
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fetch-livescores:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch Livescores from TheSportsDB
+        run: |
+          curl -X POST "${{ secrets.PROJECT_URL }}/functions/v1/fetch-livescores" \
+            -H "Authorization: Bearer ${{ secrets.SERVICE_ROLE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"trigger":"manual"}'

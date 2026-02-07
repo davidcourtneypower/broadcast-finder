@@ -17,7 +17,6 @@ interface MatchInsert {
   match_date: string;
   match_time: string;
   country: string;
-  status: string;
   popularity: number;
 }
 
@@ -77,7 +76,6 @@ function transformEvent(event: TheSportsDBEvent): MatchInsert | null {
     match_date: event.dateEvent,
     match_time: event.strTime?.substring(0, 5) || '00:00',
     country: normalizeCountry(event.strCountry || 'Global'),
-    status: 'upcoming', // Status calculated dynamically by frontend
     popularity: 70 // Default popularity
   };
 }
