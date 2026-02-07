@@ -1,6 +1,6 @@
-# BroadcastFinder
+# SportsOnTV
 
-A community-powered sports broadcast finder application that helps users discover where to watch sports matches worldwide. Automatically fetches fixture and broadcast data from TheSportsDB, with community voting to verify accuracy.
+A community-powered app to find where to watch sports on TV. Automatically fetches fixture and broadcast data from TheSportsDB, with community voting to verify accuracy.
 
 ## Features
 
@@ -38,8 +38,8 @@ A community-powered sports broadcast finder application that helps users discove
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/davidcourtneypower/broadcast-finder.git
-cd broadcast-finder
+git clone https://github.com/davidcourtneypower/sports-on-tv.git
+cd sports-on-tv
 ```
 
 2. Install dependencies:
@@ -68,7 +68,7 @@ npm run preview
 ## Project Structure
 
 ```
-broadcast-finder/
+sports-on-tv/
 ├── .github/workflows/          # CI/CD (deploy, manual fetch/cleanup)
 ├── src/
 │   ├── components/             # React components (10 files)
@@ -213,7 +213,7 @@ This project is open source and available under the MIT License.
 ## Support
 
 For issues, questions, or suggestions:
-- Create an issue in the [repository](https://github.com/davidcourtneypower/broadcast-finder/issues)
+- Create an issue in the [repository](https://github.com/davidcourtneypower/sports-on-tv/issues)
 - Check [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) for detailed technical documentation
 
 ## Acknowledgments

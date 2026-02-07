@@ -1,6 +1,6 @@
 # Supabase Configuration
 
-This directory contains database migrations and Edge Functions for the BroadcastFinder API integration.
+This directory contains database migrations and Edge Functions for the SportsOnTV API integration.
 
 ## Structure
 

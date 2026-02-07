@@ -1,7 +1,7 @@
 {
-  "name": "broadcast-finder",
+  "name": "sports-on-tv",
   "version": "1.0.0",
-  "description": "Community-powered sports broadcast finder",
+  "description": "Community-powered app to find where to watch sports on TV",
   "private": true,
   "type": "module",
   "scripts": {

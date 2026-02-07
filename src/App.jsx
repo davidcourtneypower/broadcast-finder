@@ -598,12 +598,18 @@ function App() {
       {/* Header */}
       <div style={{ background: "#12122a", borderBottom: "1px solid rgba(255,255,255,0.07)", padding: "12px 14px", position: "sticky", top: 0, zIndex: 10 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-            <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg,#00e5ff,#7c4dff)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <Icon name="tv" size={17} color="#fff" />
+          <div style={{ display: "flex", alignItems: "center", gap: 7, cursor: "pointer" }} onClick={() => window.location.reload()} title="Refresh">
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg,#00e5ff,#7c4dff)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <svg width="18" height="18" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="2" y="6" width="28" height="20" rx="3" stroke="#fff" strokeWidth="2.2" fill="none" />
+                <line x1="10" y1="28" x2="22" y2="28" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" />
+                <line x1="16" y1="26" x2="16" y2="28" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" />
+                <circle cx="16" cy="16" r="5" stroke="#fff" strokeWidth="1.8" fill="none" />
+                <path d="M13.5 16 L15.2 18 L19 13.5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+              </svg>
             </div>
             <div>
-              <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: -0.3, color: "#fff" }}>BroadcastFinder</div>
+              <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: -0.3, color: "#fff" }}>SportsOnTV</div>
               <div style={{ fontSize: 10, color: "#555", fontFamily: "monospace" }}>{liveCount} live · {filtered.length} matches</div>
             </div>
           </div>
@@ -803,7 +809,7 @@ function App() {
       {/* Footer - Sticky */}
       <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", padding: "12px 14px", background: "#0a0a18", textAlign: "center", flexShrink: 0 }}>
         <p style={{ margin: 0, fontSize: 10, color: "#3a3a4a", fontFamily: "monospace", lineHeight: 1.4 }}>
-          TeamDash · Real-time Community Broadcasts
+          SportsOnTV · Community-Powered Broadcasts
         </p>
       </div>
       

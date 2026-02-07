@@ -1,8 +1,8 @@
-# BroadcastFinder - Project Context
+# SportsOnTV - Project Context
 
 ## Project Overview
 
-**BroadcastFinder** is a community-powered sports broadcast finder application that helps users discover where to watch sports matches worldwide. The app automatically fetches fixture and broadcast data from TheSportsDB API, supports real-time updates via Supabase subscriptions, and allows community members to contribute and vote on broadcast information.
+**SportsOnTV** is a community-powered app to find where to watch sports on TV. The app automatically fetches fixture and broadcast data from TheSportsDB API, supports real-time updates via Supabase subscriptions, and allows community members to contribute and vote on broadcast information.
 
 ## Technology Stack
 
@@ -42,7 +42,7 @@
 ## Project Structure
 
 ```
-broadcast-finder/
+sports-on-tv/
 ├── .github/
 │   └── workflows/
 │       ├── deploy.yml                  # Auto-deploy to GitHub Pages on push
