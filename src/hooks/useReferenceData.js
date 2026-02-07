@@ -74,17 +74,19 @@ export const useReferenceData = () => {
   const [countries, setCountries] = useState([])
   const [countryChannels, setCountryChannels] = useState([])
   const [statusMappings, setStatusMappings] = useState([])
+  const [appConfig, setAppConfig] = useState([])
   const [loading, setLoading] = useState(true)
 
   const loadReferenceData = useCallback(async () => {
     setLoading(true)
     try {
-      const [sportsRes, leaguesRes, countriesRes, channelsRes, statusMappingsRes] = await Promise.all([
+      const [sportsRes, leaguesRes, countriesRes, channelsRes, statusMappingsRes, configRes] = await Promise.all([
         supabase.from('sports').select('*').order('name'),
         supabase.from('leagues').select('*').order('name'),
         supabase.from('countries').select('*').order('name'),
         supabase.from('country_channels').select('*').order('channel_name'),
-        supabase.from('status_mappings').select('*').order('raw_status')
+        supabase.from('status_mappings').select('*').order('raw_status'),
+        supabase.from('app_config').select('key, value, type')
       ])
 
       setSports(sportsRes.data || [])
@@ -92,6 +94,7 @@ export const useReferenceData = () => {
       setCountries(countriesRes.data || [])
       setCountryChannels(channelsRes.data || [])
       setStatusMappings(statusMappingsRes.data || [])
+      setAppConfig(configRes.data || [])
     } catch (error) {
       console.error('Error loading reference data:', error)
     }
@@ -169,10 +172,19 @@ export const useReferenceData = () => {
     return map
   }, [statusMappings])
 
+  // Get a config value with typed fallback
+  const getConfig = useCallback((key, fallback) => {
+    const entry = appConfig.find(c => c.key === key)
+    if (!entry) return fallback
+    if (entry.type === 'number') return Number(entry.value) || fallback
+    if (entry.type === 'boolean') return entry.value === 'true'
+    return entry.value
+  }, [appConfig])
+
   return {
     sports, leagues, countries, countryChannels, statusMappings,
     loading, reload: loadReferenceData,
     getSportConfig, getSportColors, getFlag,
-    getChannelsForCountry, getCountryNames, getStatusMap
+    getChannelsForCountry, getCountryNames, getStatusMap, getConfig
   }
 }

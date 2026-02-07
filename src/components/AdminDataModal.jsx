@@ -58,6 +58,23 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
   const [newStatusCategory, setNewStatusCategory] = useState('live')
   const [newStatusDesc, setNewStatusDesc] = useState('')
   const [statusCategoryFilter, setStatusCategoryFilter] = useState('all')
+  // Config tab state
+  const [configItems, setConfigItems] = useState([])
+  const [loadingConfig, setLoadingConfig] = useState(false)
+  const [editedConfig, setEditedConfig] = useState({}) // { key: newValue }
+  const [savingConfig, setSavingConfig] = useState(null) // key being saved
+  // Channels tab state
+  const [countries, setCountries] = useState([])
+  const [channels, setChannels] = useState([])
+  const [blockedBroadcasts, setBlockedBroadcasts] = useState([])
+  const [loadingChannels, setLoadingChannels] = useState(false)
+  const [newCountryName, setNewCountryName] = useState('')
+  const [newCountryFlag, setNewCountryFlag] = useState('')
+  const [newCountryCode, setNewCountryCode] = useState('')
+  const [newChannelCountry, setNewChannelCountry] = useState('')
+  const [newChannelName, setNewChannelName] = useState('')
+  const [addingCountry, setAddingCountry] = useState(false)
+  const [addingChannel, setAddingChannel] = useState(false)
   const scrollRef = useRef(null)
 
   const checkScroll = useCallback(() => {
@@ -371,7 +388,6 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
       setBroadcastResult(result)
 
       if (result.success || result.status === 'partial') {
-        setSuccess(`Linked ${result.broadcastsInserted} broadcasts (${result.matched} matched, ${result.unmatched} unmatched)`)
         setTimeout(() => { onUpdate() }, 1000)
       } else {
         setError("Broadcast fetch failed: " + (result.error || 'Unknown error'))
@@ -776,13 +792,17 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
       loadFixtures()
     } else if (activeTab === 'status') {
       loadStatusMappings()
+    } else if (activeTab === 'channels') {
+      loadChannelsData()
+    } else if (activeTab === 'config') {
+      loadConfigData()
     }
   }, [activeTab, logTypeFilter])
 
   // Re-check scroll indicator when tab or data changes
   useEffect(() => {
     requestAnimationFrame(checkScroll)
-  }, [activeTab, fixtures, users, logs, statusMappings, checkScroll])
+  }, [activeTab, fixtures, users, logs, statusMappings, countries, channels, blockedBroadcasts, configItems, checkScroll])
 
   const toggleDate = (date) => {
     setSelectedDates(prev =>
@@ -894,6 +914,156 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
     }
   }
 
+  // --- Channels tab functions ---
+  const loadChannelsData = async () => {
+    setLoadingChannels(true)
+    try {
+      const [countriesRes, channelsRes, blockedRes] = await Promise.all([
+        supabase.from('countries').select('*').order('name'),
+        supabase.from('country_channels').select('*, countries(name)').order('channel_name'),
+        supabase.from('blocked_broadcasts').select('*, matches(home, away, league, match_date)').order('blocked_at', { ascending: false })
+      ])
+      setCountries(countriesRes.data || [])
+      setChannels(channelsRes.data || [])
+      setBlockedBroadcasts(blockedRes.data || [])
+    } catch (e) {
+      console.error('Error loading channels data:', e)
+    }
+    setLoadingChannels(false)
+  }
+
+  const handleAddCountry = async () => {
+    if (!newCountryName.trim()) return
+    setAddingCountry(true)
+    setError("")
+    try {
+      const { error } = await supabase.from('countries').insert({
+        name: newCountryName.trim(),
+        flag_emoji: newCountryFlag.trim() || null,
+        code: newCountryCode.trim().toUpperCase() || null
+      })
+      if (error) throw error
+      setSuccess(`Added country: ${newCountryName.trim()}`)
+      setNewCountryName('')
+      setNewCountryFlag('')
+      setNewCountryCode('')
+      await loadChannelsData()
+      onUpdate()
+      setTimeout(() => setSuccess(""), 3000)
+    } catch (e) {
+      setError('Error adding country: ' + e.message)
+      setTimeout(() => setError(""), 3000)
+    }
+    setAddingCountry(false)
+  }
+
+  const handleAddChannel = async () => {
+    if (!newChannelCountry || !newChannelName.trim()) return
+    setAddingChannel(true)
+    setError("")
+    try {
+      const { error } = await supabase.from('country_channels').insert({
+        country_id: newChannelCountry,
+        channel_name: newChannelName.trim()
+      })
+      if (error) throw error
+      setSuccess(`Added channel: ${newChannelName.trim()}`)
+      setNewChannelName('')
+      await loadChannelsData()
+      onUpdate()
+      setTimeout(() => setSuccess(""), 3000)
+    } catch (e) {
+      setError('Error adding channel: ' + e.message)
+      setTimeout(() => setError(""), 3000)
+    }
+    setAddingChannel(false)
+  }
+
+  const handleUnblock = async (blockedId) => {
+    setError("")
+    try {
+      const { error } = await supabase
+        .from('blocked_broadcasts')
+        .delete()
+        .eq('id', blockedId)
+      if (error) throw error
+      setSuccess('Broadcast unblocked')
+      setBlockedBroadcasts(prev => prev.filter(b => b.id !== blockedId))
+      setTimeout(() => setSuccess(""), 3000)
+    } catch (e) {
+      setError('Error unblocking: ' + e.message)
+      setTimeout(() => setError(""), 3000)
+    }
+  }
+
+  // --- Config tab functions ---
+  const CRON_JOB_MAP = {
+    'cron_fetch_sports': 'fetch-all-sports-hourly',
+    'cron_fetch_broadcasts': 'fetch-broadcasts-every-15-min',
+    'cron_fetch_livescores': 'fetch-livescores-every-2-min',
+    'cron_cleanup': 'cleanup-old-data-daily'
+  }
+
+  const loadConfigData = async () => {
+    setLoadingConfig(true)
+    try {
+      const { data, error } = await supabase
+        .from('app_config')
+        .select('*')
+        .order('category')
+        .order('key')
+      if (error) throw error
+      setConfigItems(data || [])
+      setEditedConfig({})
+    } catch (e) {
+      console.error('Error loading config:', e)
+    }
+    setLoadingConfig(false)
+  }
+
+  const handleSaveConfig = async (item) => {
+    const newValue = editedConfig[item.key]
+    if (newValue === undefined || newValue === item.value) return
+
+    setSavingConfig(item.key)
+    setError("")
+    try {
+      const { error } = await supabase
+        .from('app_config')
+        .update({ value: newValue, updated_at: new Date().toISOString() })
+        .eq('key', item.key)
+      if (error) throw error
+
+      // If it's a cron key, also update the pg_cron schedule
+      if (CRON_JOB_MAP[item.key]) {
+        const { error: rpcError } = await supabase.rpc('update_cron_schedule', {
+          job_name: CRON_JOB_MAP[item.key],
+          new_schedule: newValue
+        })
+        if (rpcError) {
+          console.error('Error updating cron schedule:', rpcError)
+          setError(`Config saved but cron schedule update failed: ${rpcError.message}`)
+          setTimeout(() => setError(""), 5000)
+        }
+      }
+
+      setSuccess(`Updated: ${item.label}`)
+      setEditedConfig(prev => { const n = { ...prev }; delete n[item.key]; return n })
+      await loadConfigData()
+      onUpdate()
+      setTimeout(() => setSuccess(""), 3000)
+    } catch (e) {
+      setError('Error saving config: ' + e.message)
+      setTimeout(() => setError(""), 3000)
+    }
+    setSavingConfig(null)
+  }
+
+  const getCategoryLabel = (cat) => {
+    const labels = { frontend: 'Frontend', moderation: 'Moderation', edge_functions: 'Edge Functions', cron: 'Cron Schedules' }
+    return labels[cat] || cat
+  }
+
   const getFilteredStatusMappings = () => {
     if (statusCategoryFilter === 'all') return statusMappings
     return statusMappings.filter(m => m.display_category === statusCategoryFilter)
@@ -956,6 +1126,8 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
             { id: 'fetch', label: 'Manage' },
             { id: 'fixtures', label: 'Fixtures' },
             { id: 'status', label: 'Status' },
+            { id: 'channels', label: 'Channels' },
+            { id: 'config', label: 'Config' },
             { id: 'users', label: 'Users' },
             { id: 'logs', label: 'Logs' }
           ].map(tab => {
@@ -1974,6 +2146,272 @@ Example broadcasts:
                     </div>
                   ))}
                 </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'config' && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <div style={{ fontSize: 11, color: "#888" }}>
+                  {configItems.length} setting{configItems.length !== 1 ? 's' : ''}
+                </div>
+                <button
+                  onClick={loadConfigData}
+                  disabled={loadingConfig}
+                  style={{
+                    padding: "4px 10px",
+                    borderRadius: 6,
+                    border: "1px solid #2a2a4a",
+                    background: "rgba(255,255,255,0.05)",
+                    color: "#aaa",
+                    fontSize: 10,
+                    cursor: loadingConfig ? "not-allowed" : "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4
+                  }}
+                >
+                  <Icon name="refresh" size={10} />
+                  {loadingConfig ? "..." : "Refresh"}
+                </button>
+              </div>
+
+              {error && <div style={{ padding: 8, marginBottom: 4, background: "rgba(244,67,54,0.15)", border: "1px solid rgba(244,67,54,0.3)", borderRadius: 6, color: "#e57373", fontSize: 11 }}>{error}</div>}
+              {success && <div style={{ padding: 8, marginBottom: 4, background: "rgba(76,175,80,0.15)", border: "1px solid rgba(76,175,80,0.3)", borderRadius: 6, color: "#81c784", fontSize: 11 }}>{success}</div>}
+
+              {loadingConfig ? (
+                <div style={{ textAlign: "center", padding: 40, color: "#555" }}>
+                  <div style={{ fontSize: 12 }}>Loading config...</div>
+                </div>
+              ) : (
+                // Group by category
+                [...new Set(configItems.map(c => c.category))].map(category => (
+                  <div key={category} style={{ marginBottom: 12 }}>
+                    <h4 style={{ color: "#00e5ff", fontSize: 10, fontFamily: "monospace", textTransform: "uppercase", letterSpacing: 1, margin: "0 0 8px", borderBottom: "1px solid #2a2a4a", paddingBottom: 6 }}>
+                      {getCategoryLabel(category)}
+                    </h4>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {configItems.filter(c => c.category === category).map(item => {
+                        const edited = editedConfig[item.key]
+                        const hasChanges = edited !== undefined && edited !== item.value
+                        const isSaving = savingConfig === item.key
+                        return (
+                          <div key={item.key} style={{
+                            padding: "8px 10px",
+                            background: "rgba(255,255,255,0.03)",
+                            border: hasChanges ? "1px solid rgba(0,229,255,0.4)" : "1px solid #2a2a4a",
+                            borderRadius: 6
+                          }}>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                              <span style={{ fontSize: 11, color: "#ccc", fontWeight: 600 }}>{item.label}</span>
+                              <span style={{ fontSize: 9, color: "#444", fontFamily: "monospace" }}>{item.key}</span>
+                            </div>
+                            {item.description && (
+                              <div style={{ fontSize: 9, color: "#555", marginBottom: 6 }}>{item.description}</div>
+                            )}
+                            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                              <input
+                                value={edited !== undefined ? edited : item.value}
+                                onChange={(e) => setEditedConfig(prev => ({ ...prev, [item.key]: e.target.value }))}
+                                style={{
+                                  flex: 1,
+                                  padding: "5px 8px",
+                                  borderRadius: 4,
+                                  border: hasChanges ? "1px solid rgba(0,229,255,0.4)" : "1px solid #2a2a4a",
+                                  background: "#111122",
+                                  color: "#fff",
+                                  fontSize: 11,
+                                  fontFamily: "monospace",
+                                  outline: "none"
+                                }}
+                              />
+                              {hasChanges && (
+                                <>
+                                  <button
+                                    onClick={() => handleSaveConfig(item)}
+                                    disabled={isSaving}
+                                    style={{
+                                      padding: "4px 10px",
+                                      borderRadius: 4,
+                                      border: "none",
+                                      background: isSaving ? "#2a2a4a" : "#00e5ff",
+                                      color: isSaving ? "#666" : "#000",
+                                      fontSize: 10,
+                                      fontWeight: 700,
+                                      cursor: isSaving ? "not-allowed" : "pointer"
+                                    }}
+                                  >
+                                    {isSaving ? "..." : "Save"}
+                                  </button>
+                                  <button
+                                    onClick={() => setEditedConfig(prev => { const n = { ...prev }; delete n[item.key]; return n })}
+                                    style={{
+                                      padding: "4px 6px",
+                                      borderRadius: 4,
+                                      border: "1px solid #2a2a4a",
+                                      background: "transparent",
+                                      color: "#888",
+                                      fontSize: 10,
+                                      cursor: "pointer",
+                                      display: "flex",
+                                      alignItems: "center"
+                                    }}
+                                  >
+                                    <Icon name="x" size={10} />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {activeTab === 'channels' && (
+            <div>
+              {loadingChannels ? (
+                <div style={{ textAlign: "center", padding: 20, color: "#555" }}>Loading...</div>
+              ) : (
+                <>
+                  {/* Add Country */}
+                  <div style={{ marginBottom: 20 }}>
+                    <h4 style={{ color: "#aaa", fontSize: 11, fontFamily: "monospace", textTransform: "uppercase", letterSpacing: 1, margin: "0 0 8px" }}>Add Country</h4>
+                    <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+                      <input
+                        value={newCountryName}
+                        onChange={(e) => setNewCountryName(e.target.value)}
+                        placeholder="Country name"
+                        style={{ flex: 2, padding: "6px 10px", borderRadius: 6, border: "1px solid #2a2a4a", background: "#111122", color: "#fff", fontSize: 12, outline: "none" }}
+                      />
+                      <input
+                        value={newCountryFlag}
+                        onChange={(e) => setNewCountryFlag(e.target.value)}
+                        placeholder="Flag"
+                        style={{ width: 48, padding: "6px 8px", borderRadius: 6, border: "1px solid #2a2a4a", background: "#111122", color: "#fff", fontSize: 12, outline: "none", textAlign: "center" }}
+                      />
+                      <input
+                        value={newCountryCode}
+                        onChange={(e) => setNewCountryCode(e.target.value)}
+                        placeholder="Code"
+                        style={{ width: 48, padding: "6px 8px", borderRadius: 6, border: "1px solid #2a2a4a", background: "#111122", color: "#fff", fontSize: 12, outline: "none", textAlign: "center" }}
+                      />
+                      <button
+                        onClick={handleAddCountry}
+                        disabled={!newCountryName.trim() || addingCountry}
+                        style={{
+                          padding: "6px 12px", borderRadius: 6, border: "none",
+                          background: newCountryName.trim() ? "rgba(0,229,255,0.2)" : "#2a2a4a",
+                          color: newCountryName.trim() ? "#00e5ff" : "#555",
+                          fontSize: 11, fontWeight: 600, cursor: newCountryName.trim() ? "pointer" : "not-allowed"
+                        }}
+                      >
+                        {addingCountry ? "..." : "Add"}
+                      </button>
+                    </div>
+                    {countries.length > 0 && (
+                      <div style={{ maxHeight: 120, overflow: "auto", background: "rgba(255,255,255,0.02)", borderRadius: 6, padding: 6, border: "1px solid #2a2a4a" }}>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                          {countries.map(c => (
+                            <span key={c.id} style={{ fontSize: 10, color: "#888", background: "rgba(255,255,255,0.04)", padding: "2px 6px", borderRadius: 4, fontFamily: "monospace" }}>
+                              {c.flag_emoji || ''} {c.name} {c.code ? `(${c.code})` : ''}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Add Channel */}
+                  <div style={{ marginBottom: 20 }}>
+                    <h4 style={{ color: "#aaa", fontSize: 11, fontFamily: "monospace", textTransform: "uppercase", letterSpacing: 1, margin: "0 0 8px" }}>Add Channel</h4>
+                    <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+                      <select
+                        value={newChannelCountry}
+                        onChange={(e) => setNewChannelCountry(e.target.value)}
+                        style={{ flex: 1, padding: "6px 10px", borderRadius: 6, border: "1px solid #2a2a4a", background: "#111122", color: "#fff", fontSize: 12, outline: "none" }}
+                      >
+                        <option value="">Select country...</option>
+                        {countries.map(c => (
+                          <option key={c.id} value={c.id}>{c.flag_emoji || ''} {c.name}</option>
+                        ))}
+                      </select>
+                      <input
+                        value={newChannelName}
+                        onChange={(e) => setNewChannelName(e.target.value)}
+                        placeholder="Channel name"
+                        style={{ flex: 1, padding: "6px 10px", borderRadius: 6, border: "1px solid #2a2a4a", background: "#111122", color: "#fff", fontSize: 12, outline: "none" }}
+                      />
+                      <button
+                        onClick={handleAddChannel}
+                        disabled={!newChannelCountry || !newChannelName.trim() || addingChannel}
+                        style={{
+                          padding: "6px 12px", borderRadius: 6, border: "none",
+                          background: newChannelCountry && newChannelName.trim() ? "rgba(0,229,255,0.2)" : "#2a2a4a",
+                          color: newChannelCountry && newChannelName.trim() ? "#00e5ff" : "#555",
+                          fontSize: 11, fontWeight: 600, cursor: newChannelCountry && newChannelName.trim() ? "pointer" : "not-allowed"
+                        }}
+                      >
+                        {addingChannel ? "..." : "Add"}
+                      </button>
+                    </div>
+                    {channels.length > 0 && (
+                      <div style={{ maxHeight: 160, overflow: "auto", background: "rgba(255,255,255,0.02)", borderRadius: 6, padding: 8, border: "1px solid #2a2a4a" }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                          {channels.map(ch => (
+                            <div key={ch.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 10, color: "#888", fontFamily: "monospace", padding: "2px 4px" }}>
+                              <span>{ch.countries?.name || '?'} - {ch.channel_name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Blocked Broadcasts */}
+                  <div>
+                    <h4 style={{ color: "#aaa", fontSize: 11, fontFamily: "monospace", textTransform: "uppercase", letterSpacing: 1, margin: "0 0 8px" }}>
+                      Blocked Broadcasts ({blockedBroadcasts.length})
+                    </h4>
+                    {blockedBroadcasts.length === 0 ? (
+                      <div style={{ textAlign: "center", padding: 16, color: "#555", fontSize: 11 }}>
+                        No blocked broadcasts
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        {blockedBroadcasts.map(b => (
+                          <div key={b.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: 8, background: "rgba(255,255,255,0.03)", border: "1px solid #2a2a4a", borderRadius: 6 }}>
+                            <div>
+                              <div style={{ fontSize: 11, color: "#ccc", marginBottom: 2 }}>
+                                {b.country} - {b.channel}
+                              </div>
+                              <div style={{ fontSize: 9, color: "#555", fontFamily: "monospace" }}>
+                                {b.matches ? `${b.matches.home} vs ${b.matches.away}` : b.match_id}
+                                {' · '}{b.reason}
+                                {' · '}{new Date(b.blocked_at).toLocaleDateString()}
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => handleUnblock(b.id)}
+                              style={{
+                                padding: "4px 10px", borderRadius: 4, border: "none",
+                                background: "rgba(76,175,80,0.15)", color: "#4caf50",
+                                fontSize: 10, fontWeight: 600, cursor: "pointer", flexShrink: 0
+                              }}
+                            >
+                              Unblock
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
             </div>
           )}

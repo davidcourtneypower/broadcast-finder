@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { Icon } from './Icon'
 import { getFlag as staticGetFlag } from '../utils/helpers'
 
-export const AddBroadcastModal = ({ onClose, match, onAdd, user, countryNames, getChannelsForCountry, getFlag: getFlagProp }) => {
+export const AddBroadcastModal = ({ onClose, match, onAdd, user, countryNames, getChannelsForCountry, getFlag: getFlagProp, blockedBroadcasts = [] }) => {
   const getFlag = getFlagProp || staticGetFlag
   const [selectedCountry, setSelectedCountry] = useState("")
   const [selectedChannel, setSelectedChannel] = useState("")
@@ -11,21 +11,34 @@ export const AddBroadcastModal = ({ onClose, match, onAdd, user, countryNames, g
   // Get existing broadcasts for this match to prevent duplicates
   const existingBroadcasts = match.broadcasts || []
 
-  // Filter channels: exclude ones already added for the selected country
+  // Filter channels: exclude ones already added or blocked for the selected country
   const allChannels = selectedCountry && getChannelsForCountry ? getChannelsForCountry(selectedCountry) : []
   const availableChannels = selectedCountry
     ? allChannels.filter(channel => {
-        // Check if this country + channel combination already exists
         const isDuplicate = existingBroadcasts.some(
           b => b.country === selectedCountry && b.channel === channel
         )
-        return !isDuplicate
+        const isBlocked = blockedBroadcasts.some(
+          b => b.country.toLowerCase() === selectedCountry.toLowerCase() && b.channel.toLowerCase() === channel.toLowerCase()
+        )
+        return !isDuplicate && !isBlocked
       })
     : []
 
-  // Check if the selected combination is a duplicate
+  // Count blocked channels for messaging
+  const blockedCount = selectedCountry
+    ? allChannels.filter(channel =>
+        blockedBroadcasts.some(
+          b => b.country.toLowerCase() === selectedCountry.toLowerCase() && b.channel.toLowerCase() === channel.toLowerCase()
+        )
+      ).length
+    : 0
+
+  // Check if the selected combination is a duplicate or blocked
   const isDuplicate = selectedCountry && selectedChannel &&
     existingBroadcasts.some(b => b.country === selectedCountry && b.channel === selectedChannel)
+  const isBlocked = selectedCountry && selectedChannel &&
+    blockedBroadcasts.some(b => b.country.toLowerCase() === selectedCountry.toLowerCase() && b.channel.toLowerCase() === selectedChannel.toLowerCase())
 
   const handleAdd = async () => {
     if (!selectedCountry || !selectedChannel || isDuplicate) return
@@ -58,7 +71,12 @@ export const AddBroadcastModal = ({ onClose, match, onAdd, user, countryNames, g
             <label style={{ color: "#aaa", fontSize: 11, fontFamily: "monospace", textTransform: "uppercase", letterSpacing: 1, display: "block", marginBottom: 6 }}>Channel/Service</label>
             {availableChannels.length === 0 ? (
               <div style={{ padding: "12px", background: "rgba(255,193,7,0.1)", border: "1px solid rgba(255,193,7,0.3)", borderRadius: 8, color: "#ffb300", fontSize: 12 }}>
-                All channels for {selectedCountry} have already been added to this fixture.
+                {blockedCount > 0 && blockedCount === allChannels.length
+                  ? `All channels for ${selectedCountry} have been blocked by community votes.`
+                  : blockedCount > 0
+                    ? `All channels for ${selectedCountry} have been added or blocked.`
+                    : `All channels for ${selectedCountry} have already been added to this fixture.`
+                }
               </div>
             ) : (
               <select value={selectedChannel} onChange={(e) => setSelectedChannel(e.target.value)} style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid #2a2a4a", background: "#111122", color: "#fff", fontSize: 13, outline: "none" }}>
@@ -68,7 +86,7 @@ export const AddBroadcastModal = ({ onClose, match, onAdd, user, countryNames, g
             )}
           </div>
         )}
-        <button onClick={handleAdd} disabled={!selectedCountry || !selectedChannel || adding || isDuplicate || availableChannels.length === 0} style={{ width: "100%", padding: "10px 0", borderRadius: 8, border: "none", background: selectedCountry && selectedChannel && !adding && !isDuplicate ? "linear-gradient(135deg,#00e5ff,#7c4dff)" : "#2a2a4a", color: "#fff", fontSize: 14, fontWeight: 600, cursor: selectedCountry && selectedChannel && !adding && !isDuplicate ? "pointer" : "not-allowed" }}>
+        <button onClick={handleAdd} disabled={!selectedCountry || !selectedChannel || adding || isDuplicate || isBlocked || availableChannels.length === 0} style={{ width: "100%", padding: "10px 0", borderRadius: 8, border: "none", background: selectedCountry && selectedChannel && !adding && !isDuplicate && !isBlocked ? "linear-gradient(135deg,#00e5ff,#7c4dff)" : "#2a2a4a", color: "#fff", fontSize: 14, fontWeight: 600, cursor: selectedCountry && selectedChannel && !adding && !isDuplicate && !isBlocked ? "pointer" : "not-allowed" }}>
           {adding ? "Adding..." : "Add Broadcast"}
         </button>
       </div>

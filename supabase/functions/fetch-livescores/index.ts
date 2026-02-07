@@ -25,7 +25,8 @@ async function handleDisappearedMatches(
   supabase: ReturnType<typeof createClient>,
   liveEventIds: Set<string>,
   now: Date,
-  terminalStatuses: string[]
+  terminalStatuses: string[],
+  disappearanceMinutes: number = 5
 ): Promise<number> {
   const today = now.toISOString().split('T')[0];
 
@@ -55,7 +56,7 @@ async function handleDisappearedMatches(
       const lastUpdate = new Date(match.last_livescore_update);
       const minutesSinceLastUpdate = (now.getTime() - lastUpdate.getTime()) / (1000 * 60);
 
-      if (minutesSinceLastUpdate > 5) {
+      if (minutesSinceLastUpdate > disappearanceMinutes) {
         toFinish.push(match.id);
       }
     }
@@ -110,6 +111,18 @@ serve(async (req) => {
     // Initialize TheSportsDB V2 client
     const client = new TheSportsDBv2Client();
 
+    // Load runtime config from app_config
+    const { data: configRows } = await supabase
+      .from('app_config')
+      .select('key, value')
+      .in('key', ['disappearance_minutes', 'livescore_batch_size']);
+
+    const configMap: Record<string, string> = {};
+    configRows?.forEach((r: { key: string; value: string }) => { configMap[r.key] = r.value; });
+
+    const BATCH_SIZE = parseInt(configMap.livescore_batch_size) || 50;
+    const DISAPPEARANCE_MINUTES = parseInt(configMap.disappearance_minutes) || 5;
+
     // 0. Load terminal statuses from DB for disappearance detection
     const FALLBACK_TERMINAL = ['FT', 'AET', 'AOT', 'PEN', 'AP', 'CANC', 'PST', 'ABD', 'SUSP', 'NS', 'TBD', 'upcoming'];
     let terminalStatuses: string[] = [];
@@ -145,7 +158,6 @@ serve(async (req) => {
     let updatedCount = 0;
     let notFoundCount = 0;
     const errors: string[] = [];
-    const BATCH_SIZE = 50;
 
     for (let i = 0; i < livescoreEvents.length; i += BATCH_SIZE) {
       const batch = livescoreEvents.slice(i, i + BATCH_SIZE);
@@ -190,7 +202,7 @@ serve(async (req) => {
     const now = new Date();
     let finishedCount = 0;
     if (livescoreEvents.length > 0) {
-      finishedCount = await handleDisappearedMatches(supabase, liveEventIds, now, terminalStatuses);
+      finishedCount = await handleDisappearedMatches(supabase, liveEventIds, now, terminalStatuses, DISAPPEARANCE_MINUTES);
     } else {
       console.warn('Livescore API returned 0 events — skipping disappearance detection (possible API outage)');
     }

@@ -15,7 +15,7 @@ import { useReferenceData } from './hooks/useReferenceData'
 
 function App() {
   const { user, loading: authLoading, signInWithGoogle, signOut } = useAuth()
-  const { getSportConfig, getSportColors, getFlag, getCountryNames, getChannelsForCountry, getStatusMap, reload: reloadReferenceData } = useReferenceData()
+  const { getSportConfig, getSportColors, getFlag, getCountryNames, getChannelsForCountry, getStatusMap, getConfig, reload: reloadReferenceData } = useReferenceData()
   const mapStatus = useMemo(() => createStatusMapper(getStatusMap()), [getStatusMap])
   const { formatTime, getStatus: getUserStatus, getRelative, preferences, loading: prefsLoading } = useUserPreferences(user)
   const [isAdmin, setIsAdmin] = useState(false)
@@ -31,7 +31,8 @@ function App() {
   const [search, setSearch] = useState("")
   const [matches, setMatches] = useState([])
   const [loading, setLoading] = useState(true)
-  const [displayLimit, setDisplayLimit] = useState(20) // Pagination: show 20 fixtures initially
+  const fixturesPerPage = getConfig('fixtures_per_page', 20)
+  const [displayLimit, setDisplayLimit] = useState(20) // Pagination: overridden by fixturesPerPage from config
 
   const loadMatches = async () => {
     setLoading(true)
@@ -175,75 +176,22 @@ function App() {
     setLoading(false)
   }
   
-  // Set up real-time subscriptions for broadcasts and votes
+  // Set up real-time subscription for votes only
+  // Broadcasts and match statuses update on manual refresh / page reload
   useEffect(() => {
-    // Subscribe to broadcasts changes (works for logged in and logged out users)
-    const broadcastsChannel = supabase
-      .channel('broadcasts-changes')
-      .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'broadcasts' },
-        async (payload) => {
-          if (payload.eventType === 'INSERT') {
-            // New broadcast added
-            const newBroadcast = payload.new
-
-            // Fetch votes for this broadcast
-            const { data: votes } = await supabase
-              .from('votes')
-              .select('*')
-              .eq('broadcast_id', newBroadcast.id)
-
-            // Calculate vote stats (check user only if logged in)
-            const voteStats = { up: 0, down: 0, myVote: null }
-            votes?.forEach(v => {
-              if (v.vote_type === 'up') voteStats.up++
-              else if (v.vote_type === 'down') voteStats.down++
-              if (user && (v.user_id_uuid === user.id || v.user_id === user.id)) {
-                voteStats.myVote = v.vote_type
-              }
-            })
-
-            // Update matches state
-            setMatches(prev => prev.map(m => {
-              if (m.id !== newBroadcast.match_id) return m
-
-              // Check if broadcast already exists
-              const exists = m.broadcasts.some(b => b.id === newBroadcast.id)
-              if (exists) return m
-
-              return {
-                ...m,
-                broadcasts: [...m.broadcasts, { ...newBroadcast, voteStats }]
-              }
-            }))
-          } else if (payload.eventType === 'DELETE') {
-            // Broadcast deleted
-            setMatches(prev => prev.map(m => ({
-              ...m,
-              broadcasts: m.broadcasts.filter(b => b.id !== payload.old.id)
-            })))
-          }
-        }
-      )
-      .subscribe()
-
-    // Subscribe to votes changes (works for logged in and logged out users)
     const votesChannel = supabase
       .channel('votes-changes')
       .on('postgres_changes',
         { event: '*', schema: 'public', table: 'votes' },
         async (payload) => {
-          // Get the broadcast ID from the payload
           const broadcastId = payload.new?.broadcast_id || payload.old?.broadcast_id
           if (!broadcastId) return
 
-          // Refetch all votes for this broadcast to ensure accurate counts
           const { data: votes } = await supabase
             .from('votes')
             .select('*')
             .eq('broadcast_id', broadcastId)
 
-          // Recalculate vote stats from scratch (check user only if logged in)
           const voteStats = { up: 0, down: 0, myVote: null }
           votes?.forEach(v => {
             if (v.vote_type === 'up') voteStats.up++
@@ -253,57 +201,19 @@ function App() {
             }
           })
 
-          // Update the specific broadcast's vote stats
           setMatches(prev => prev.map(m => ({
             ...m,
             broadcasts: m.broadcasts.map(b => {
               if (b.id !== broadcastId) return b
-              return {
-                ...b,
-                voteStats
-              }
+              return { ...b, voteStats }
             })
           })))
         }
       )
       .subscribe()
 
-    // Subscribe to matches status changes (for livescore updates)
-    const matchesChannel = supabase
-      .channel('matches-status-changes')
-      .on('postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'matches' },
-        (payload) => {
-          const updated = payload.new
-          if (!updated || !updated.id) return
-
-          setMatches(prev => prev.map(m => {
-            if (m.id !== updated.id) return m
-
-            // Map raw API status, apply starting-soon overlay
-            let displayStatus = mapStatus(updated.status)
-            if (displayStatus === 'upcoming') {
-              if (isStartingSoon(updated.match_date || m.match_date, updated.match_time || m.match_time)) {
-                displayStatus = 'starting-soon'
-              }
-            }
-
-            return {
-              ...m,
-              status: displayStatus,
-              home_score: updated.home_score,
-              away_score: updated.away_score,
-            }
-          }))
-        }
-      )
-      .subscribe()
-
-    // Cleanup subscriptions
     return () => {
-      supabase.removeChannel(broadcastsChannel)
       supabase.removeChannel(votesChannel)
-      supabase.removeChannel(matchesChannel)
     }
   }, [user])
   
@@ -313,22 +223,45 @@ function App() {
       return
     }
 
+    // Check if this country+channel combo is blocked for this fixture
+    const { data: blocked } = await supabase
+      .from('blocked_broadcasts')
+      .select('id')
+      .eq('match_id', matchId)
+      .ilike('country', country)
+      .ilike('channel', channel)
+      .limit(1)
+
+    if (blocked && blocked.length > 0) {
+      alert('This broadcast has been blocked due to community downvotes and cannot be re-added.')
+      return
+    }
+
     const { data, error } = await supabase.from("broadcasts").insert([{
       match_id: matchId,
       country,
       channel,
       created_by_uuid: user.id,
-      created_by: user.email || 'Anonymous' // Keep legacy field for compatibility
+      created_by: user.email || 'Anonymous'
     }]).select()
 
-    if (!error && data && data.length > 0) {
+    if (error) {
+      if (error.code === '23505') {
+        alert('This broadcast already exists for this fixture.')
+      } else {
+        console.error('Error adding broadcast:', error)
+      }
+      return
+    }
+
+    if (data && data.length > 0) {
       const newBroadcast = data[0]
 
-      // Automatically create an "up" vote for the creator
+      // Auto-upvote by creator
       const { error: voteError } = await supabase.from("votes").insert([{
         broadcast_id: newBroadcast.id,
         user_id_uuid: user.id,
-        user_id: user.id, // Keep legacy field for compatibility
+        user_id: user.id,
         vote_type: 'up'
       }])
 
@@ -336,8 +269,19 @@ function App() {
         console.error('Error creating auto-vote:', voteError)
       }
 
-      // Real-time subscriptions will handle adding the broadcast and vote to state
-      // No need for manual state update here
+      // Update state directly (no real-time subscription for broadcasts)
+      setMatches(prev => prev.map(m => {
+        if (m.id !== matchId) return m
+        const exists = m.broadcasts.some(b => b.id === newBroadcast.id)
+        if (exists) return m
+        return {
+          ...m,
+          broadcasts: [...m.broadcasts, {
+            ...newBroadcast,
+            voteStats: { up: 1, down: 0, myVote: 'up' }
+          }]
+        }
+      }))
     }
   }
   
@@ -472,6 +416,50 @@ function App() {
     }
   }
 
+  const handleRefreshBroadcasts = async (matchId) => {
+    // Fetch broadcasts for this match
+    const { data: broadcasts } = await supabase
+      .from('broadcasts')
+      .select('*')
+      .eq('match_id', matchId)
+
+    // Fetch votes for these broadcasts
+    const broadcastIds = (broadcasts || []).map(b => b.id)
+    let votes = []
+    if (broadcastIds.length > 0) {
+      const { data: votesData } = await supabase
+        .from('votes')
+        .select('*')
+        .in('broadcast_id', broadcastIds)
+      votes = votesData || []
+    }
+
+    // Build vote stats
+    const votesByBroadcast = {}
+    votes.forEach(v => {
+      if (!votesByBroadcast[v.broadcast_id]) {
+        votesByBroadcast[v.broadcast_id] = { up: 0, down: 0, myVote: null }
+      }
+      if (v.vote_type === 'up') votesByBroadcast[v.broadcast_id].up++
+      else if (v.vote_type === 'down') votesByBroadcast[v.broadcast_id].down++
+      if (user && (v.user_id_uuid === user.id || v.user_id === user.id)) {
+        votesByBroadcast[v.broadcast_id].myVote = v.vote_type
+      }
+    })
+
+    // Update only broadcasts for this match
+    setMatches(prev => prev.map(m => {
+      if (m.id !== matchId) return m
+      return {
+        ...m,
+        broadcasts: (broadcasts || []).map(b => ({
+          ...b,
+          voteStats: votesByBroadcast[b.id] || { up: 0, down: 0, myVote: null }
+        }))
+      }
+    }))
+  }
+
   useEffect(() => {
     // Check if user is admin (you can customize this logic)
     // For now, checking if email matches a specific domain or value
@@ -491,11 +479,12 @@ function App() {
 
   // Reset pagination when filters, search, or date changes
   useEffect(() => {
-    setDisplayLimit(20)
-  }, [filters, search, dateTab])
+    setDisplayLimit(fixturesPerPage)
+  }, [filters, search, dateTab, fixturesPerPage])
 
-  // Periodically re-evaluate "starting-soon" for upcoming matches (every 60s)
+  // Periodically re-evaluate "starting-soon" for upcoming matches
   // The livescore API only reports "NS" before a match, so starting-soon is client-side
+  const statusRefreshMs = getConfig('status_refresh_seconds', 60) * 1000
   useEffect(() => {
     const timer = setInterval(() => {
       setMatches(prev => {
@@ -512,17 +501,18 @@ function App() {
         })
         return changed ? updated : prev
       })
-    }, 60000)
+    }, statusRefreshMs)
 
     return () => clearInterval(timer)
-  }, [])
+  }, [statusRefreshMs])
 
   const todayStr = getTodayStr()
   const tomorrowStr = getTomorrowStr()
   const hasActiveFilters = filters.sports?.length > 0 || filters.countries?.length > 0 || filters.events?.length > 0 || filters.statuses?.length > 0
 
-  // Check if a match is within 15 minutes of starting (for "starting-soon" overlay)
+  // Check if a match is within N minutes of starting (for "starting-soon" overlay)
   // This is client-side only since the livescore API only reports "NS" before kickoff
+  const startingSoonMinutes = getConfig('starting_soon_minutes', 15)
   const isStartingSoon = (matchDate, matchTime) => {
     try {
       let timeStr = matchTime.trim()
@@ -530,7 +520,7 @@ function App() {
       const matchDateTime = new Date(`${matchDate}T${timeStr}Z`)
       if (isNaN(matchDateTime.getTime())) return false
       const diffMinutes = (matchDateTime - new Date()) / (1000 * 60)
-      return diffMinutes > 0 && diffMinutes <= 15
+      return diffMinutes > 0 && diffMinutes <= startingSoonMinutes
     } catch {
       return false
     }
@@ -610,11 +600,19 @@ function App() {
   const hasMoreMatches = filtered.length > displayLimit
 
   const loadMore = () => {
-    setDisplayLimit(prev => prev + 20)
+    setDisplayLimit(prev => prev + fixturesPerPage)
   }
 
-  const openAddBroadcast = (match) => {
+  const [blockedBroadcasts, setBlockedBroadcasts] = useState([])
+
+  const openAddBroadcast = async (match) => {
     setSelectedMatch(match)
+    // Fetch blocked broadcasts for this match
+    const { data } = await supabase
+      .from('blocked_broadcasts')
+      .select('country, channel')
+      .eq('match_id', match.id)
+    setBlockedBroadcasts(data || [])
     setShowAddBroadcast(true)
   }
 
@@ -791,6 +789,7 @@ function App() {
                   onRequestAuth={() => setShowAuth(true)}
                   onAddBroadcast={openAddBroadcast}
                   onDeleteBroadcast={handleDeleteBroadcast}
+                  onRefreshBroadcasts={handleRefreshBroadcasts}
                   isAdmin={isAdmin}
                   getSportColors={getSportColors}
                   getFlag={getFlag}
@@ -855,7 +854,7 @@ function App() {
       {/* Modals */}
       {showAuth && <AuthModal onClose={() => setShowAuth(false)} signInWithGoogle={signInWithGoogle} />}
       {showFilters && <FilterModal onClose={() => setShowFilters(false)} filters={filters} onApply={setFilters} allSports={allSports} matches={matches} getSportColors={getSportColors} getFlag={getFlag} headerRef={headerRef} />}
-      {showAddBroadcast && selectedMatch && <AddBroadcastModal onClose={() => setShowAddBroadcast(false)} match={selectedMatch} onAdd={handleAddBroadcast} user={user} countryNames={getCountryNames()} getChannelsForCountry={getChannelsForCountry} getFlag={getFlag} />}
+      {showAddBroadcast && selectedMatch && <AddBroadcastModal onClose={() => setShowAddBroadcast(false)} match={selectedMatch} onAdd={handleAddBroadcast} user={user} countryNames={getCountryNames()} getChannelsForCountry={getChannelsForCountry} getFlag={getFlag} blockedBroadcasts={blockedBroadcasts} />}
       {showAdminPanel && <AdminDataModal onClose={() => setShowAdminPanel(false)} onUpdate={() => { reloadReferenceData(); loadMatches() }} currentUserEmail={user?.email} headerRef={headerRef} />}
       {showUserSettings && <UserSettingsModal onClose={() => setShowUserSettings(false)} onSave={handleSettingsSaved} user={user} headerRef={headerRef} />}
     </div>

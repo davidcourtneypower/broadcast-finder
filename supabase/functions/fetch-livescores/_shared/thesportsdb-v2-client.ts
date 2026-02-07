@@ -89,7 +89,7 @@ export interface FetchTVResponse {
 }
 
 export interface FetchLivescoresResponse {
-  events: TheSportsDBLivescoreEvent[] | null;
+  livescore: TheSportsDBLivescoreEvent[] | null;
 }
 
 // Popular league IDs for V1 fallback
@@ -313,8 +313,11 @@ export class TheSportsDBv2Client {
         return [];
       }
 
-      const data: FetchLivescoresResponse = await response.json();
-      const events = data.events || [];
+      const data = await response.json();
+      const keys = Object.keys(data || {});
+      console.log(`[V2] Livescore response keys: [${keys.join(', ')}]`);
+      // API returns data under "livescore" key (singular)
+      const events: TheSportsDBLivescoreEvent[] = data?.livescore || data?.events || [];
       console.log(`[V2] Received ${events.length} livescore events`);
       return events;
     } catch (error) {

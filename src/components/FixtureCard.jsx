@@ -3,11 +3,12 @@ import { Icon } from './Icon'
 import { BroadcastPill } from './BroadcastPill'
 import { getTimezoneAbbreviation } from '../utils/timeFormatting'
 
-export const FixtureCard = ({ match, user, onVote, onRequestAuth, onAddBroadcast, onDeleteBroadcast, isAdmin, getSportColors, getFlag, formatTime, getStatus, getRelative, preferences }) => {
+export const FixtureCard = ({ match, user, onVote, onRequestAuth, onAddBroadcast, onDeleteBroadcast, onRefreshBroadcasts, isAdmin, getSportColors, getFlag, formatTime, getStatus, getRelative, preferences }) => {
   const [expanded, setExpanded] = useState(false)
   const [relativeTime, setRelativeTime] = useState('')
   const [sortBy, setSortBy] = useState('votes')
   const [sortAsc, setSortAsc] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const col = getSportColors ? getSportColors(match.sport) : { accent: "#00e5ff", bg: "rgba(0,229,255,0.12)", glow: "rgba(0,229,255,0.25)" }
 
   // Format match time in user's timezone
@@ -114,53 +115,85 @@ export const FixtureCard = ({ match, user, onVote, onRequestAuth, onAddBroadcast
         <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
           <Icon name="wifi" size={11} color="#555" />
           {expanded ? "Hide Broadcasts" : "See Broadcasts"}
+          {match.broadcasts && match.broadcasts.length > 0 && (
+            <span style={{ color: "#555" }}>({match.broadcasts.length})</span>
+          )}
         </span>
         <Icon name={expanded ? "chevUp" : "chevDown"} size={12} />
       </button>
       {expanded && (
         <div style={{ padding: "8px 12px", background: "rgba(0,0,0,0.2)", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
-          {match.broadcasts && match.broadcasts.length > 1 && (
-            <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 8 }}>
-              <span style={{ fontSize: 9, color: "#555", fontFamily: "monospace", textTransform: "uppercase", letterSpacing: 0.5, marginRight: 2 }}>Sort</span>
-              {[
-                { key: 'votes', label: 'Votes' },
-                { key: 'country', label: 'Country' },
-                { key: 'channel', label: 'Channel' },
-              ].map(opt => {
-                const isActive = sortBy === opt.key
-                return (
-                  <button
-                    key={opt.key}
-                    onClick={() => {
-                      if (isActive) {
-                        setSortAsc(prev => !prev)
-                      } else {
-                        setSortBy(opt.key)
-                        setSortAsc(opt.key === 'votes' ? false : true)
-                      }
-                    }}
-                    style={{
-                      padding: "3px 8px",
-                      borderRadius: 4,
-                      border: `1px solid ${isActive ? "rgba(0,229,255,0.4)" : "rgba(255,255,255,0.08)"}`,
-                      background: isActive ? "rgba(0,229,255,0.1)" : "rgba(255,255,255,0.03)",
-                      color: isActive ? "#00e5ff" : "#666",
-                      fontSize: 10,
-                      fontWeight: 600,
-                      cursor: "pointer",
-                      fontFamily: "monospace",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 3,
-                    }}
-                  >
-                    {opt.label}
-                    {isActive && <Icon name={sortAsc ? "sortDesc" : "sortAsc"} size={10} color="#00e5ff" />}
-                  </button>
-                )
-              })}
-            </div>
-          )}
+          <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 8 }}>
+            {match.broadcasts && match.broadcasts.length > 1 && (
+              <>
+                <span style={{ fontSize: 9, color: "#555", fontFamily: "monospace", textTransform: "uppercase", letterSpacing: 0.5, marginRight: 2 }}>Sort</span>
+                {[
+                  { key: 'votes', label: 'Votes' },
+                  { key: 'country', label: 'Country' },
+                  { key: 'channel', label: 'Channel' },
+                ].map(opt => {
+                  const isActive = sortBy === opt.key
+                  return (
+                    <button
+                      key={opt.key}
+                      onClick={() => {
+                        if (isActive) {
+                          setSortAsc(prev => !prev)
+                        } else {
+                          setSortBy(opt.key)
+                          setSortAsc(opt.key === 'votes' ? false : true)
+                        }
+                      }}
+                      style={{
+                        padding: "3px 8px",
+                        borderRadius: 4,
+                        border: `1px solid ${isActive ? "rgba(0,229,255,0.4)" : "rgba(255,255,255,0.08)"}`,
+                        background: isActive ? "rgba(0,229,255,0.1)" : "rgba(255,255,255,0.03)",
+                        color: isActive ? "#00e5ff" : "#666",
+                        fontSize: 10,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        fontFamily: "monospace",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 3,
+                      }}
+                    >
+                      {opt.label}
+                      {isActive && <Icon name={sortAsc ? "sortDesc" : "sortAsc"} size={10} color="#00e5ff" />}
+                    </button>
+                  )
+                })}
+              </>
+            )}
+            <div style={{ flex: 1 }} />
+            <button
+              onClick={async () => {
+                if (refreshing) return
+                setRefreshing(true)
+                try {
+                  await onRefreshBroadcasts(match.id)
+                } finally {
+                  setRefreshing(false)
+                }
+              }}
+              disabled={refreshing}
+              style={{
+                padding: "3px 6px",
+                borderRadius: 4,
+                border: "1px solid rgba(255,255,255,0.08)",
+                background: "rgba(255,255,255,0.03)",
+                color: refreshing ? "#333" : "#555",
+                cursor: refreshing ? "default" : "pointer",
+                display: "flex",
+                alignItems: "center",
+                opacity: refreshing ? 0.5 : 1,
+              }}
+              title="Refresh broadcasts"
+            >
+              <Icon name="refresh" size={10} />
+            </button>
+          </div>
           {match.broadcasts && match.broadcasts.length > 0 ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }}>
               {[...match.broadcasts].sort((a, b) => {
