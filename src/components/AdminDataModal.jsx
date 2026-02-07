@@ -890,7 +890,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
         </div>
 
         {/* Tab Content */}
-        <div className="dark-scrollbar" style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
+        <div className="hidden-scrollbar" style={{ flex: 1, overflowY: "auto", overflowX: "hidden", minHeight: 0 }}>
           {activeTab === 'import' && (
             <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
               <div style={{ fontSize: 11, color: "#888", marginBottom: 12, lineHeight: 1.5 }}>
@@ -982,7 +982,7 @@ Example broadcasts:
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               <div>
                 <div style={{ fontSize: 12, color: "#aaa", marginBottom: 8, fontWeight: 600 }}>Select Dates</div>
-                <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ display: "flex", gap: 6 }}>
                   {['today', 'tomorrow', 'day_after_tomorrow'].map(date => {
                     const selected = selectedDates.includes(date)
                     return (
@@ -991,18 +991,19 @@ Example broadcasts:
                         onClick={() => toggleDate(date)}
                         style={{
                           flex: 1,
-                          padding: "10px 16px",
+                          padding: "8px 4px",
                           borderRadius: 8,
                           border: selected ? "1px solid rgba(0,229,255,0.5)" : "1px solid #2a2a4a",
                           background: selected ? "rgba(0,229,255,0.15)" : "rgba(255,255,255,0.04)",
                           color: selected ? "#00e5ff" : "#666",
-                          fontSize: 13,
+                          fontSize: 11,
                           fontWeight: 600,
                           cursor: "pointer",
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
-                          gap: 8
+                          gap: 6,
+                          minWidth: 0
                         }}
                       >
                         <div style={{

@@ -154,7 +154,7 @@ export const UserSettingsModal = ({ onClose, onSave, user, headerRef }) => {
           </button>
         </div>
 
-        <div className="dark-scrollbar" style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
+        <div className="hidden-scrollbar" style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
         {loading ? (
           <div style={{ textAlign: "center", padding: "40px 0", color: "#666" }}>
             Loading preferences...

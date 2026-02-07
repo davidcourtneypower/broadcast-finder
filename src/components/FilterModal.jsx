@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Icon } from './Icon'
 
 const SearchInput = ({ value, onChange, placeholder }) => (
@@ -235,11 +235,23 @@ export const FilterModal = ({ onClose, filters, onApply, allSports, matches, get
   const [sportSearch, setSportSearch] = useState("")
   const [countrySearch, setCountrySearch] = useState("")
   const [leagueSearch, setLeagueSearch] = useState("")
+  const [showScrollHint, setShowScrollHint] = useState(false)
+  const scrollRef = useRef(null)
 
   const headerHeight = headerRef?.current?.offsetHeight || 0
 
+  const checkScroll = useCallback(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const hasMore = el.scrollHeight - el.scrollTop - el.clientHeight > 10
+    setShowScrollHint(hasMore)
+  }, [])
+
   useEffect(() => {
-    requestAnimationFrame(() => requestAnimationFrame(() => setIsVisible(true)))
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      setIsVisible(true)
+      checkScroll()
+    }))
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = '' }
   }, [])
@@ -341,6 +353,11 @@ export const FilterModal = ({ onClose, filters, onApply, allSports, matches, get
   const countriesDisabled = localSports.length === 0
   const leaguesDisabled = localSports.length === 0
 
+  // Re-check scroll hint when content changes
+  useEffect(() => {
+    requestAnimationFrame(checkScroll)
+  }, [localSports, localCountries, countrySearch, sportSearch, leagueSearch, checkScroll])
+
   return (
     <>
       {/* Backdrop */}
@@ -383,7 +400,8 @@ export const FilterModal = ({ onClose, filters, onApply, allSports, matches, get
         </div>
 
         {/* Scrollable Content */}
-        <div className="hidden-scrollbar" style={{ flex: 1, overflowY: "auto", padding: "12px 16px" }}>
+        <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
+        <div ref={scrollRef} onScroll={checkScroll} className="hidden-scrollbar" style={{ height: "100%", overflowY: "auto", padding: "12px 16px" }}>
 
           {/* Status */}
           <SectionHeader title="Status" count={4} />
@@ -479,6 +497,26 @@ export const FilterModal = ({ onClose, filters, onApply, allSports, matches, get
                 <div style={{ fontSize: 11, color: "#555", padding: "4px 0" }}>No leagues for selected filters</div>
               )}
             </>
+          )}
+        </div>
+
+          {/* Scroll hint */}
+          {showScrollHint && (
+            <div style={{
+              position: "absolute",
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: 32,
+              background: "linear-gradient(transparent, #1a1a2e)",
+              display: "flex",
+              alignItems: "flex-end",
+              justifyContent: "center",
+              paddingBottom: 4,
+              pointerEvents: "none",
+            }}>
+              <Icon name="chevDown" size={14} color="#666" />
+            </div>
           )}
         </div>
 
