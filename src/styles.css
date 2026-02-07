@@ -90,3 +90,13 @@ input, select, textarea {
   opacity: 1;
   pointer-events: auto;
 }
+
+/* Scroll hint bounce animation */
+@keyframes scrollHintBounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+.scroll-hint-bounce {
+  animation: scrollHintBounce 1.5s ease-in-out infinite;
+}

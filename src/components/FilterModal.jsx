@@ -507,15 +507,26 @@ export const FilterModal = ({ onClose, filters, onApply, allSports, matches, get
               bottom: 0,
               left: 0,
               right: 0,
-              height: 32,
-              background: "linear-gradient(transparent, #1a1a2e)",
+              height: 40,
+              background: "linear-gradient(transparent, rgba(26,26,46,0.95))",
               display: "flex",
               alignItems: "flex-end",
               justifyContent: "center",
-              paddingBottom: 4,
+              paddingBottom: 6,
               pointerEvents: "none",
             }}>
-              <Icon name="chevDown" size={14} color="#666" />
+              <div className="scroll-hint-bounce" style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+                padding: "3px 10px",
+                borderRadius: 12,
+                background: "rgba(0,229,255,0.1)",
+                border: "1px solid rgba(0,229,255,0.2)",
+              }}>
+                <Icon name="chevDown" size={10} color="rgba(0,229,255,0.6)" />
+                <span style={{ fontSize: 9, color: "rgba(0,229,255,0.6)", fontWeight: 600, letterSpacing: 0.5 }}>MORE</span>
+              </div>
             </div>
           )}
         </div>

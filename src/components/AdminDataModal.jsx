@@ -52,17 +52,12 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
   const [cleaningUp, setCleaningUp] = useState(false)
   const [cleanupResult, setCleanupResult] = useState(null)
   const [showScrollHint, setShowScrollHint] = useState(false)
-  const [visibleFixtureCount, setVisibleFixtureCount] = useState(30)
   const scrollRef = useRef(null)
 
   const checkScroll = useCallback(() => {
     const el = scrollRef.current
     if (!el) return
-    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100
     setShowScrollHint(el.scrollHeight - el.scrollTop - el.clientHeight > 10)
-    if (nearBottom) {
-      setVisibleFixtureCount(prev => prev + 30)
-    }
   }, [])
 
   // Detect and preview import data
@@ -1234,7 +1229,7 @@ Example broadcasts:
                   {/* Sport filter */}
                   <select
                     value={sportFilter}
-                    onChange={(e) => { setSportFilter(e.target.value); setVisibleFixtureCount(30) }}
+                    onChange={(e) => setSportFilter(e.target.value)}
                     style={{
                       padding: "6px 10px",
                       borderRadius: 6,
@@ -1258,7 +1253,7 @@ Example broadcasts:
                     <Icon name="search" size={12} color="#555" style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
                     <input
                       value={searchFixture}
-                      onChange={(e) => { setSearchFixture(e.target.value); setVisibleFixtureCount(30) }}
+                      onChange={(e) => setSearchFixture(e.target.value)}
                       placeholder="Search teams, leagues..."
                       style={{
                         width: "100%",
@@ -1314,7 +1309,7 @@ Example broadcasts:
                     </div>
                   )}
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    {getFilteredFixtures().slice(0, visibleFixtureCount).map(fixture => {
+                    {getFilteredFixtures().map(fixture => {
                       const isSelected = selectedFixtures.includes(fixture.id)
                       const isExpanded = expandedFixture === fixture.id
                       const broadcastCount = fixture.broadcasts?.length || 0
@@ -1701,15 +1696,26 @@ Example broadcasts:
               bottom: 0,
               left: 0,
               right: 0,
-              height: 32,
-              background: "linear-gradient(transparent, #1a1a2e)",
+              height: 40,
+              background: "linear-gradient(transparent, rgba(26,26,46,0.95))",
               display: "flex",
               alignItems: "flex-end",
               justifyContent: "center",
-              paddingBottom: 4,
+              paddingBottom: 6,
               pointerEvents: "none",
             }}>
-              <Icon name="chevDown" size={14} color="#666" />
+              <div className="scroll-hint-bounce" style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+                padding: "3px 10px",
+                borderRadius: 12,
+                background: "rgba(0,229,255,0.1)",
+                border: "1px solid rgba(0,229,255,0.2)",
+              }}>
+                <Icon name="chevDown" size={10} color="rgba(0,229,255,0.6)" />
+                <span style={{ fontSize: 9, color: "rgba(0,229,255,0.6)", fontWeight: 600, letterSpacing: 0.5 }}>MORE</span>
+              </div>
             </div>
           )}
         </div>
