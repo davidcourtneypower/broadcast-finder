@@ -65,6 +65,9 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
   const [loadingConfig, setLoadingConfig] = useState(false)
   const [editedConfig, setEditedConfig] = useState({}) // { key: newValue }
   const [savingConfig, setSavingConfig] = useState(null) // key being saved
+  // Cron job toggle state
+  const [cronJobs, setCronJobs] = useState([])
+  const [togglingJob, setTogglingJob] = useState(null)
   // Channels tab state
   const [countries, setCountries] = useState([])
   const [channels, setChannels] = useState([])
@@ -881,7 +884,9 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
     setSelectedFixtures([])
 
     // Load data for specific tabs
-    if (activeTab === 'logs') {
+    if (activeTab === 'fetch') {
+      loadCronJobs()
+    } else if (activeTab === 'logs') {
       loadLogs()
     } else if (activeTab === 'users') {
       loadUsers()
@@ -899,7 +904,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
   // Re-check scroll indicator when tab or data changes
   useEffect(() => {
     requestAnimationFrame(checkScroll)
-  }, [activeTab, fixtures, users, logs, statusMappings, countries, channels, blockedBroadcasts, configItems, checkScroll])
+  }, [activeTab, fixtures, users, logs, statusMappings, countries, channels, blockedBroadcasts, configItems, cronJobs, checkScroll])
 
   const toggleDate = (date) => {
     setSelectedDates(prev =>
@@ -1090,12 +1095,48 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
     }
   }
 
+  // --- Cron job toggle functions ---
+  const CRON_JOB_LABELS = {
+    'fetch-events': 'Fetch Events',
+    'fetch-broadcasts': 'Fetch Broadcasts',
+    'fetch-livestatus': 'Fetch Livestatus',
+    'cleanup-old-data': 'Cleanup Old Data'
+  }
+
+  const loadCronJobs = async () => {
+    try {
+      const { data, error } = await supabase.rpc('get_cron_jobs')
+      if (error) throw error
+      setCronJobs(data || [])
+    } catch (e) {
+      console.error('Error loading cron jobs:', e)
+    }
+  }
+
+  const handleToggleCronJob = async (jobName, currentActive) => {
+    setTogglingJob(jobName)
+    try {
+      const { error } = await supabase.rpc('toggle_cron_job', {
+        job_name: jobName,
+        is_active: !currentActive
+      })
+      if (error) throw error
+      setSuccess(`${CRON_JOB_LABELS[jobName] || jobName} ${!currentActive ? 'enabled' : 'disabled'}`)
+      setTimeout(() => setSuccess(""), 3000)
+      await loadCronJobs()
+    } catch (e) {
+      setError(`Failed to toggle job: ${e.message}`)
+      setTimeout(() => setError(""), 3000)
+    }
+    setTogglingJob(null)
+  }
+
   // --- Config tab functions ---
   const CRON_JOB_MAP = {
-    'cron_fetch_events': 'fetch-events-hourly',
-    'cron_fetch_broadcasts': 'fetch-broadcasts-every-15-min',
-    'cron_fetch_livestatus': 'fetch-livestatus-every-2-min',
-    'cron_cleanup': 'cleanup-old-data-daily'
+    'cron_fetch_events': 'fetch-events',
+    'cron_fetch_broadcasts': 'fetch-broadcasts',
+    'cron_fetch_livestatus': 'fetch-livestatus',
+    'cron_cleanup': 'cleanup-old-data'
   }
 
   const loadConfigData = async () => {
@@ -1387,6 +1428,62 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
 
           {activeTab === 'fetch' && (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              {/* Scheduled Jobs */}
+              {cronJobs.length > 0 && (
+                <div>
+                  <div style={{ fontSize: 12, color: "#aaa", marginBottom: 8, fontWeight: 600 }}>Scheduled Jobs</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {cronJobs.map(job => (
+                      <div key={job.jobname} style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        padding: "8px 12px",
+                        background: "rgba(255,255,255,0.04)",
+                        borderRadius: 8,
+                        border: "1px solid #2a2a4a"
+                      }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                          <span style={{ fontSize: 12, color: "#ddd", fontWeight: 600 }}>
+                            {CRON_JOB_LABELS[job.jobname] || job.jobname}
+                          </span>
+                          <span style={{ fontSize: 10, color: "#666", fontFamily: "monospace" }}>
+                            {job.schedule}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => handleToggleCronJob(job.jobname, job.active)}
+                          disabled={togglingJob === job.jobname}
+                          style={{
+                            width: 40,
+                            height: 22,
+                            borderRadius: 11,
+                            border: "none",
+                            background: job.active ? "#00e5ff" : "#333",
+                            cursor: togglingJob === job.jobname ? "not-allowed" : "pointer",
+                            position: "relative",
+                            transition: "background 0.2s",
+                            opacity: togglingJob === job.jobname ? 0.5 : 1
+                          }}
+                        >
+                          <div style={{
+                            width: 16,
+                            height: 16,
+                            borderRadius: 8,
+                            background: "#fff",
+                            position: "absolute",
+                            top: 3,
+                            left: job.active ? 21 : 3,
+                            transition: "left 0.2s",
+                            boxShadow: "0 1px 3px rgba(0,0,0,0.3)"
+                          }} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div>
                 <div style={{ fontSize: 12, color: "#aaa", marginBottom: 8, fontWeight: 600 }}>Select Dates</div>
                 <div style={{ display: "flex", gap: 6 }}>

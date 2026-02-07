@@ -6,22 +6,21 @@
 -- 1. Add sport_type to sports table, remove unused columns
 -- ============================================================
 
--- Add sport type classification
-ALTER TABLE sports ADD COLUMN IF NOT EXISTS sport_type TEXT NOT NULL DEFAULT 'team'
-  CHECK (sport_type IN ('team', '1v1', 'multi_participant'));
+-- Add sport type classification (uses TheSportsDB strFormat values)
+ALTER TABLE sports ADD COLUMN IF NOT EXISTS sport_type TEXT NOT NULL DEFAULT 'TeamvsTeam'
+  CHECK (sport_type IN ('TeamvsTeam', 'EventSport'));
 
 -- Remove unused columns (status calc is now server-driven + app_config)
 ALTER TABLE sports DROP COLUMN IF EXISTS duration_minutes;
 ALTER TABLE sports DROP COLUMN IF EXISTS pregame_window_minutes;
 
--- Seed sport types for known sports
-UPDATE sports SET sport_type = '1v1' WHERE name IN (
-  'Boxing', 'MMA', 'Tennis', 'Fighting', 'Snooker', 'Darts',
-  'Badminton', 'Table Tennis', 'Fencing', 'Wrestling'
-);
-UPDATE sports SET sport_type = 'multi_participant' WHERE name IN (
-  'Golf', 'Motorsport', 'Olympics', 'Cycling', 'Skiing',
-  'Wintersports', 'Skating', 'Athletics', 'Swimming', 'Sailing'
+-- Seed sport types for known EventSport sports
+UPDATE sports SET sport_type = 'EventSport' WHERE name IN (
+  'Motorsport', 'Fighting', 'Golf', 'Tennis', 'Cycling',
+  'ESports', 'Snooker', 'Darts', 'Boxing', 'MMA',
+  'Olympics', 'Skiing', 'Wintersports', 'Skating',
+  'Athletics', 'Swimming', 'Sailing', 'Badminton',
+  'Table Tennis', 'Fencing', 'Wrestling'
 );
 
 -- ============================================================
@@ -199,13 +198,25 @@ DO $$ BEGIN
 EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
 DO $$ BEGIN
+  PERFORM cron.unschedule('fetch-all-sports-hourly');
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+DO $$ BEGIN
   PERFORM cron.unschedule('fetch-livescores-every-2-min');
 EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
+DO $$ BEGIN
+  PERFORM cron.unschedule('fetch-broadcasts-every-15-min');
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+DO $$ BEGIN
+  PERFORM cron.unschedule('cleanup-old-data-daily');
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
--- Recreate with new function names
+-- Recreate all cron jobs with clean names
 SELECT cron.schedule(
-  'fetch-events-hourly',
+  'fetch-events',
   '0 * * * *',
   $$ SELECT net.http_post(
     url := (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'project_url')
@@ -219,7 +230,7 @@ SELECT cron.schedule(
 );
 
 SELECT cron.schedule(
-  'fetch-livestatus-every-2-min',
+  'fetch-livestatus',
   '*/2 * * * *',
   $$ SELECT net.http_post(
     url := (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'project_url')
@@ -229,5 +240,33 @@ SELECT cron.schedule(
       'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'service_role_key')
     ),
     body := '{"trigger":"scheduled"}'::jsonb
+  ) AS request_id; $$
+);
+
+SELECT cron.schedule(
+  'fetch-broadcasts',
+  '*/15 * * * *',
+  $$ SELECT net.http_post(
+    url := (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'project_url')
+           || '/functions/v1/fetch-broadcasts',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'service_role_key')
+    ),
+    body := '{"dates":["today","tomorrow","day_after_tomorrow"],"trigger":"scheduled"}'::jsonb
+  ) AS request_id; $$
+);
+
+SELECT cron.schedule(
+  'cleanup-old-data',
+  '0 3 * * *',
+  $$ SELECT net.http_post(
+    url := (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'project_url')
+           || '/functions/v1/cleanup-old-data',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'service_role_key')
+    ),
+    body := '{}'::jsonb
   ) AS request_id; $$
 );

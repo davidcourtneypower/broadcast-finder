@@ -59,8 +59,20 @@ export interface TheSportsDBTVEvent {
   strTVStation: string;
 }
 
+export interface TheSportsDBSport {
+  idSport: string;
+  strSport: string;
+  strFormat: string;
+  strSportThumb: string;
+  strSportDescription: string;
+}
+
 export interface FetchEventsResponse {
   events: TheSportsDBEvent[] | null;
+}
+
+export interface FetchSportsResponse {
+  sports: TheSportsDBSport[] | null;
 }
 
 export interface FetchTVResponse {
@@ -113,6 +125,30 @@ export class TheSportsDBv2Client {
   // V2: Key goes in header, not in URL
   private get baseUrlV2(): string {
     return 'https://www.thesportsdb.com/api/v2/json';
+  }
+
+  /**
+   * Fetch all sports with their strFormat classification
+   * Uses V1 all_sports.php (free tier returns limited results, premium returns all)
+   */
+  async fetchAllSports(): Promise<TheSportsDBSport[]> {
+    const url = `${this.baseUrlV1}/all_sports.php`;
+    console.log(`[V1] Fetching all sports...`);
+
+    try {
+      const response = await this.fetchWithTimeout(url, false);
+      if (!response.ok) {
+        console.warn(`[V1] All sports API returned ${response.status}`);
+        return [];
+      }
+      const data: FetchSportsResponse = await response.json();
+      const sports = data.sports || [];
+      console.log(`[V1] Received ${sports.length} sports`);
+      return sports;
+    } catch (error) {
+      console.warn(`[V1] Failed to fetch sports: ${(error as Error).message}`);
+      return [];
+    }
   }
 
   /**

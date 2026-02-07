@@ -6,7 +6,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { TheSportsDBv2Client, TheSportsDBEvent } from './_shared/thesportsdb-v2-client.ts';
+import { TheSportsDBv2Client, TheSportsDBEvent, TheSportsDBSport } from './_shared/thesportsdb-v2-client.ts';
 
 interface EventInsert {
   id: string;
@@ -91,27 +91,40 @@ function transformEvent(
 
 /**
  * Auto-populate sports and leagues reference tables from discovered event data.
- * Uses ON CONFLICT DO NOTHING so existing rows are never overwritten.
+ * Uses sport format data from TheSportsDB to set sport_type_id.
  */
 async function upsertReferenceData(
   supabase: any,
-  events: TheSportsDBEvent[]
+  events: TheSportsDBEvent[],
+  sportFormats: Map<string, string>
 ) {
-  // 1. Collect unique sports
+  // 1. Collect unique sports and resolve their sport_type_id
   const uniqueSports = [...new Set(
     events.map(e => e.strSport).filter(Boolean)
   )];
 
   if (uniqueSports.length > 0) {
-    const sportRows = uniqueSports.map(name => ({ name }));
+    // Fetch sport_types to map format name → id
+    const { data: sportTypes } = await supabase
+      .from('sport_types')
+      .select('id, name');
+    const typeIdMap = new Map<string, number>();
+    (sportTypes || []).forEach((t: any) => typeIdMap.set(t.name, t.id));
+    const defaultTypeId = typeIdMap.get('TeamvsTeam') || 1;
+
+    const sportRows = uniqueSports.map(name => {
+      const format = sportFormats.get(name) || 'TeamvsTeam';
+      return { name, sport_type_id: typeIdMap.get(format) || defaultTypeId };
+    });
+
     const { error: sportError } = await supabase
       .from('sports')
-      .upsert(sportRows, { onConflict: 'name', ignoreDuplicates: true });
+      .upsert(sportRows, { onConflict: 'name', ignoreDuplicates: false });
 
     if (sportError) {
       console.warn(`Failed to upsert sports: ${sportError.message}`);
     } else {
-      console.log(`Upserted ${uniqueSports.length} sports to reference table`);
+      console.log(`Upserted ${uniqueSports.length} sports with format data`);
     }
   }
 
@@ -243,9 +256,22 @@ serve(async (req) => {
       }
     }
 
-    // Phase 2: Ensure reference data exists (sports + leagues)
+    // Phase 2: Fetch sport formats from TheSportsDB, then ensure reference data exists
+    const sportFormats = new Map<string, string>();
     try {
-      await upsertReferenceData(supabase, allRawEvents);
+      const apiSports = await client.fetchAllSports();
+      for (const s of apiSports) {
+        if (s.strSport && s.strFormat) {
+          sportFormats.set(s.strSport, s.strFormat);
+        }
+      }
+      console.log(`Fetched ${sportFormats.size} sport formats from API`);
+    } catch (formatError) {
+      console.warn('Failed to fetch sport formats (non-fatal):', formatError);
+    }
+
+    try {
+      await upsertReferenceData(supabase, allRawEvents, sportFormats);
     } catch (refError) {
       console.warn('Reference data upsert failed (non-fatal):', refError);
     }
