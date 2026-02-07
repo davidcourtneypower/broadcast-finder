@@ -26,7 +26,7 @@ const SearchInput = ({ value, onChange, placeholder }) => (
 
 const STATUS_OPTIONS = [
   { value: 'live', label: 'LIVE', color: '#e53935' },
-  { value: 'starting-soon', label: 'SOON', color: '#7c4dff' },
+  { value: 'starting-soon', label: 'STARTING SOON', color: '#7c4dff' },
   { value: 'upcoming', label: 'UPCOMING', color: '#26a69a' },
   { value: 'finished', label: 'FINISHED', color: '#666' }
 ]
@@ -61,8 +61,8 @@ const StatusGridItem = ({ status, isSelected, onToggle }) => (
       padding: "10px 4px",
       cursor: "pointer",
       borderRadius: 8,
-      background: isSelected ? `${status.color}18` : "transparent",
-      border: `1px solid ${isSelected ? (status.color === '#666' ? '#999' : `${status.color}88`) : "transparent"}`,
+      background: "transparent",
+      border: "none",
     }}
   >
     <div style={{
@@ -100,6 +100,8 @@ const SportGridItem = ({ sport, isSelected, onToggle, colors }) => (
       borderRadius: 8,
       background: "transparent",
       border: "none",
+      minWidth: 0,
+      overflow: "hidden",
     }}
   >
     <div style={{
@@ -144,6 +146,8 @@ const CountryGridItem = ({ country, flag, isSelected, onToggle }) => (
       borderRadius: 8,
       background: "transparent",
       border: "none",
+      minWidth: 0,
+      overflow: "hidden",
     }}
   >
     <div style={{
@@ -189,6 +193,8 @@ const LeagueGridItem = ({ league, isSelected, onToggle, sportColors }) => (
       borderRadius: 8,
       background: "transparent",
       border: "none",
+      minWidth: 0,
+      overflow: "hidden",
     }}
   >
     <div style={{
@@ -377,11 +383,11 @@ export const FilterModal = ({ onClose, filters, onApply, allSports, matches, get
         </div>
 
         {/* Scrollable Content */}
-        <div className="dark-scrollbar" style={{ flex: 1, overflowY: "auto", padding: "12px 16px" }}>
+        <div className="hidden-scrollbar" style={{ flex: 1, overflowY: "auto", padding: "12px 16px" }}>
 
           {/* Status */}
           <SectionHeader title="Status" count={4} />
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginBottom: 8 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginBottom: 8, overflow: "hidden" }}>
             {STATUS_OPTIONS.map(status => (
               <StatusGridItem
                 key={status.value}
@@ -397,8 +403,8 @@ export const FilterModal = ({ onClose, filters, onApply, allSports, matches, get
           {allSports.length > 8 && (
             <SearchInput value={sportSearch} onChange={setSportSearch} placeholder="Search sports..." />
           )}
-          <div className="dark-scrollbar" style={{ maxHeight: 260, overflowY: "auto", marginBottom: 8 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 4 }}>
+          <div className="dark-scrollbar" style={{ maxHeight: 260, overflowY: "auto", overflowX: "hidden", marginBottom: 8 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 4, overflow: "hidden" }}>
               {displayedSports.map(sport => {
                 const col = getSportColors ? getSportColors(sport) : { accent: "#00e5ff", bg: "rgba(0,229,255,0.12)" }
                 return (
@@ -423,11 +429,11 @@ export const FilterModal = ({ onClose, filters, onApply, allSports, matches, get
             <div style={{ fontSize: 11, color: "#444", fontStyle: "italic", padding: "4px 0 8px" }}>Select a sport first</div>
           ) : (
             <>
-              {filteredCountries.length > 6 && (
+              {(countrySearch || filteredCountries.length > 6) && (
                 <SearchInput value={countrySearch} onChange={setCountrySearch} placeholder="Search countries..." />
               )}
-              <div className="dark-scrollbar" style={{ maxHeight: 220, overflowY: "auto", marginBottom: 8 }}>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 4 }}>
+              <div className="dark-scrollbar" style={{ maxHeight: 220, overflowY: "auto", overflowX: "hidden", marginBottom: 8 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4, overflow: "hidden" }}>
                   {displayedCountries.map(country => (
                     <CountryGridItem
                       key={country}
@@ -455,8 +461,8 @@ export const FilterModal = ({ onClose, filters, onApply, allSports, matches, get
           ) : (
             <>
               <SearchInput value={leagueSearch} onChange={setLeagueSearch} placeholder="Search leagues..." />
-              <div className="dark-scrollbar" style={{ maxHeight: 220, overflowY: "auto", marginBottom: 8 }}>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4 }}>
+              <div className="dark-scrollbar" style={{ maxHeight: 220, overflowY: "auto", overflowX: "hidden", marginBottom: 8 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 4, overflow: "hidden" }}>
                   {displayedLeagues.map(event => {
                     const sport = getSportForLeague(event)
                     const sportCol = sport && getSportColors ? getSportColors(sport) : { accent: "#00e5ff", bg: "rgba(0,229,255,0.15)" }

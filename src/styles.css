@@ -47,6 +47,16 @@ input, select, textarea {
   scrollbar-color: rgba(255, 255, 255, 0.12) rgba(255, 255, 255, 0.03);
 }
 
+/* Hidden scrollbar - scrollable but no visible track */
+.hidden-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.hidden-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 /* Filter panel slide-down animation */
 .filter-panel-backdrop {
   position: fixed;
