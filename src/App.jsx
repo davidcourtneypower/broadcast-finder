@@ -671,13 +671,21 @@ function App() {
       <div ref={headerRef} style={{ background: "#12122a", borderBottom: "1px solid rgba(255,255,255,0.07)", padding: "12px 14px", position: "sticky", top: 0, zIndex: 10 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7, cursor: "pointer" }} onClick={() => window.location.reload()} title="Refresh">
-            <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg,#00e5ff,#7c4dff)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <svg width="18" height="18" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect x="3" y="7" width="26" height="17" rx="2.5" stroke="#fff" strokeWidth="2" fill="none" />
-                <line x1="11" y1="27" x2="21" y2="27" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
-                <line x1="16" y1="24" x2="16" y2="27" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
-                <path d="M13 18l3-5 3 5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                <path d="M10 20l6-10 6 10" stroke="#fff" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" fill="none" opacity="0.5" />
+            <div style={{ width: 32, height: 32, borderRadius: 8, overflow: "hidden", flexShrink: 0 }}>
+              <svg width="32" height="32" viewBox="0 0 64 64" fill="none">
+                <defs>
+                  <linearGradient id="logoGrad" x1="0" y1="0" x2="64" y2="64">
+                    <stop offset="0%" stopColor="#00e5ff"/>
+                    <stop offset="100%" stopColor="#7c4dff"/>
+                  </linearGradient>
+                </defs>
+                <rect width="64" height="64" rx="16" fill="url(#logoGrad)"/>
+                <rect x="14" y="16" width="36" height="24" rx="4" fill="rgba(255,255,255,0.15)" stroke="#fff" strokeWidth="2"/>
+                <path d="M26 42 L26 46 L38 46 L38 42" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                <path d="M28 24 L28 34 L37 29 Z" fill="#fff" opacity="0.9"/>
+                <circle cx="46" cy="19" r="5.5" fill="#fff"/>
+                <path d="M46 13.5 L47.5 16 L50.5 16 L48.5 18 L49.5 21 L46 19.5 L42.5 21 L43.5 18 L41.5 16 L44.5 16 Z" fill="none" stroke="rgba(0,0,0,0.15)" strokeWidth="0.5"/>
+                <path d="M46 15.5 L47 17 L48.5 17 L47.5 18.5 L48 20 L46 19 L44 20 L44.5 18.5 L43.5 17 L45 17 Z" fill="rgba(100,50,200,0.25)" stroke="rgba(0,0,0,0.2)" strokeWidth="0.3"/>
               </svg>
             </div>
             <div>
