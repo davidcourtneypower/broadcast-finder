@@ -8,50 +8,6 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { TheSportsDBv2Client, TheSportsDBLivescoreEvent } from './_shared/thesportsdb-v2-client.ts';
 
-// Set of strProgress values that indicate the match is currently in play
-const LIVE_PROGRESS = new Set([
-  // Soccer
-  '1H', '2H', 'HT', 'ET', 'P', 'BT',
-  // Basketball / American Football
-  'Q1', 'Q2', 'Q3', 'Q4', 'OT',
-  // Ice Hockey
-  'P1', 'P2', 'P3', 'PT',
-  // Baseball
-  'IN1', 'IN2', 'IN3', 'IN4', 'IN5', 'IN6', 'IN7', 'IN8', 'IN9',
-  // Rugby / Handball
-  // (1H, 2H, HT, ET, BT, PT already included above)
-  // Volleyball
-  'S1', 'S2', 'S3', 'S4', 'S5',
-]);
-
-// Set of strProgress values that indicate the match has finished
-const FINISHED_PROGRESS = new Set([
-  'FT', 'AET', 'AOT', 'PEN', 'AP',
-]);
-
-// Set of strProgress values that indicate cancellation/postponement/suspension
-const CANCELLED_PROGRESS = new Set([
-  'CANC', 'PST', 'ABD', 'SUSP', 'INT', 'INTR', 'POST', 'AWD', 'WO', 'AW',
-]);
-
-/**
- * Map TheSportsDB strProgress value to our app status
- */
-function mapProgressToStatus(strProgress: string): string {
-  if (!strProgress) return 'upcoming';
-
-  const p = strProgress.toUpperCase().trim();
-
-  if (p === 'NS' || p === 'TBD' || p === '') return 'upcoming';
-  if (LIVE_PROGRESS.has(p)) return 'live';
-  if (FINISHED_PROGRESS.has(p)) return 'finished';
-  if (CANCELLED_PROGRESS.has(p)) return 'cancelled';
-
-  // Unknown progress value — default to live (safer to show than hide)
-  console.warn(`Unknown strProgress value: "${strProgress}"`);
-  return 'live';
-}
-
 /**
  * Parse score string to integer, returns null for invalid/empty values
  */
@@ -68,15 +24,19 @@ function parseScore(score: string | null): number | null {
 async function handleDisappearedMatches(
   supabase: ReturnType<typeof createClient>,
   liveEventIds: Set<string>,
-  now: Date
+  now: Date,
+  terminalStatuses: string[]
 ): Promise<number> {
   const today = now.toISOString().split('T')[0];
 
-  // Get all matches currently marked as "live" in the DB for today
+  // Get matches that were recently updated by livescores and are not yet done
+  // Terminal statuses are loaded from the status_mappings DB table
+  const statusFilter = terminalStatuses.map(s => `"${s}"`).join(',');
   const { data: currentlyLive, error } = await supabase
     .from('matches')
-    .select('id, sportsdb_event_id, last_livescore_update')
-    .eq('status', 'live')
+    .select('id, sportsdb_event_id, status, last_livescore_update')
+    .not('last_livescore_update', 'is', null)
+    .not('status', 'in', `(${statusFilter})`)
     .gte('match_date', today);
 
   if (error || !currentlyLive || currentlyLive.length === 0) return 0;
@@ -108,13 +68,13 @@ async function handleDisappearedMatches(
     const { error: updateError } = await supabase
       .from('matches')
       .update({
-        status: 'finished',
+        status: 'FT',
         last_livescore_update: now.toISOString()
       })
       .in('id', toFinish);
 
     if (updateError) {
-      console.error(`Failed to mark disappeared matches as finished: ${updateError.message}`);
+      console.error(`Failed to mark disappeared matches as FT: ${updateError.message}`);
       return 0;
     }
 
@@ -150,6 +110,24 @@ serve(async (req) => {
     // Initialize TheSportsDB V2 client
     const client = new TheSportsDBv2Client();
 
+    // 0. Load terminal statuses from DB for disappearance detection
+    const FALLBACK_TERMINAL = ['FT', 'AET', 'AOT', 'PEN', 'AP', 'CANC', 'PST', 'ABD', 'SUSP', 'NS', 'TBD', 'upcoming'];
+    let terminalStatuses: string[] = [];
+    try {
+      const { data: mappings } = await supabase
+        .from('status_mappings')
+        .select('raw_status, display_category')
+        .in('display_category', ['finished', 'cancelled', 'upcoming']);
+      if (mappings && mappings.length > 0) {
+        terminalStatuses = mappings.map(m => m.raw_status);
+      }
+    } catch (e) {
+      console.error('Failed to load status mappings, using hardcoded fallback:', e);
+    }
+    if (terminalStatuses.length === 0) {
+      terminalStatuses = FALLBACK_TERMINAL;
+    }
+
     // 1. Fetch livescores from TheSportsDB
     const livescoreEvents = await client.fetchLivescores();
 
@@ -163,41 +141,59 @@ serve(async (req) => {
       }
     }
 
-    // 3. Process each livescore event — update status and scores in the DB
+    // 3. Process livescore events in parallel batches
     let updatedCount = 0;
     let notFoundCount = 0;
     const errors: string[] = [];
+    const BATCH_SIZE = 50;
 
-    for (const event of livescoreEvents) {
-      if (!event.idEvent) continue;
+    for (let i = 0; i < livescoreEvents.length; i += BATCH_SIZE) {
+      const batch = livescoreEvents.slice(i, i + BATCH_SIZE);
 
-      const status = mapProgressToStatus(event.strProgress);
-      const homeScore = parseScore(event.intHomeScore);
-      const awayScore = parseScore(event.intAwayScore);
+      const results = await Promise.allSettled(
+        batch.map(async (event) => {
+          if (!event.idEvent) return 'skip';
 
-      const { data, error } = await supabase
-        .from('matches')
-        .update({
-          status,
-          home_score: homeScore,
-          away_score: awayScore,
-          last_livescore_update: new Date().toISOString(),
+          const status = event.strStatus || 'NS';
+          const homeScore = parseScore(event.intHomeScore);
+          const awayScore = parseScore(event.intAwayScore);
+
+          const { data, error } = await supabase
+            .from('matches')
+            .update({
+              status,
+              home_score: homeScore,
+              away_score: awayScore,
+              last_livescore_update: new Date().toISOString(),
+            })
+            .eq('sportsdb_event_id', event.idEvent)
+            .select('id');
+
+          if (error) throw new Error(`Event ${event.idEvent}: ${error.message}`);
+          if (!data || data.length === 0) return 'not_found';
+          return 'updated';
         })
-        .eq('sportsdb_event_id', event.idEvent)
-        .select('id');
+      );
 
-      if (error) {
-        errors.push(`Event ${event.idEvent}: ${error.message}`);
-      } else if (!data || data.length === 0) {
-        notFoundCount++;
-      } else {
-        updatedCount++;
+      for (const result of results) {
+        if (result.status === 'fulfilled') {
+          if (result.value === 'updated') updatedCount++;
+          else if (result.value === 'not_found') notFoundCount++;
+        } else {
+          errors.push(result.reason?.message || 'Unknown error');
+        }
       }
     }
 
     // 4. Handle disappeared matches (live in DB but not in current feed)
+    // Skip when API returns 0 events to prevent false positives during outages
     const now = new Date();
-    const finishedCount = await handleDisappearedMatches(supabase, liveEventIds, now);
+    let finishedCount = 0;
+    if (livescoreEvents.length > 0) {
+      finishedCount = await handleDisappearedMatches(supabase, liveEventIds, now, terminalStatuses);
+    } else {
+      console.warn('Livescore API returned 0 events — skipping disappearance detection (possible API outage)');
+    }
 
     // 5. Log to api_fetch_logs
     const status = errors.length > 0

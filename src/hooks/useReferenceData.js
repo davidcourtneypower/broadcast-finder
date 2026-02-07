@@ -73,22 +73,25 @@ export const useReferenceData = () => {
   const [leagues, setLeagues] = useState([])
   const [countries, setCountries] = useState([])
   const [countryChannels, setCountryChannels] = useState([])
+  const [statusMappings, setStatusMappings] = useState([])
   const [loading, setLoading] = useState(true)
 
   const loadReferenceData = useCallback(async () => {
     setLoading(true)
     try {
-      const [sportsRes, leaguesRes, countriesRes, channelsRes] = await Promise.all([
+      const [sportsRes, leaguesRes, countriesRes, channelsRes, statusMappingsRes] = await Promise.all([
         supabase.from('sports').select('*').order('name'),
         supabase.from('leagues').select('*').order('name'),
         supabase.from('countries').select('*').order('name'),
-        supabase.from('country_channels').select('*').order('channel_name')
+        supabase.from('country_channels').select('*').order('channel_name'),
+        supabase.from('status_mappings').select('*').order('raw_status')
       ])
 
       setSports(sportsRes.data || [])
       setLeagues(leaguesRes.data || [])
       setCountries(countriesRes.data || [])
       setCountryChannels(channelsRes.data || [])
+      setStatusMappings(statusMappingsRes.data || [])
     } catch (error) {
       console.error('Error loading reference data:', error)
     }
@@ -156,10 +159,20 @@ export const useReferenceData = () => {
     return countries.map(c => c.name).sort()
   }, [countries])
 
+  // Build status map from DB: { 'FT': 'finished', '1H': 'live', ... }
+  const getStatusMap = useCallback(() => {
+    if (!statusMappings || statusMappings.length === 0) return null
+    const map = {}
+    statusMappings.forEach(sm => {
+      map[sm.raw_status.toUpperCase()] = sm.display_category
+    })
+    return map
+  }, [statusMappings])
+
   return {
-    sports, leagues, countries, countryChannels,
+    sports, leagues, countries, countryChannels, statusMappings,
     loading, reload: loadReferenceData,
     getSportConfig, getSportColors, getFlag,
-    getChannelsForCountry, getCountryNames
+    getChannelsForCountry, getCountryNames, getStatusMap
   }
 }

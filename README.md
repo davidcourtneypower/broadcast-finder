@@ -5,15 +5,15 @@ A community-powered app to find where to watch sports on TV. Automatically fetch
 ## Features
 
 - **13+ Sports**: Soccer, Basketball, American Football, Ice Hockey, Tennis, Baseball, Rugby, Cricket, Golf, Motorsport, Boxing/MMA, Volleyball, Handball
-- **Automated Data**: Fixtures fetched hourly, broadcasts every 15 minutes via Supabase pg_cron
-- **Live Match Tracking**: Real-time status indicators (LIVE, STARTING SOON, UPCOMING, FINISHED)
+- **Automated Data**: Fixtures fetched hourly, broadcasts every 15 minutes, livescores every 2 minutes via Supabase pg_cron
+- **Live Match Tracking**: Server-driven status via TheSportsDB V2 livescore API (LIVE, STARTING SOON, UPCOMING, FINISHED, CANCELLED)
 - **Broadcast Information**: Auto-fetched from TheSportsDB + community-contributed channels
 - **Voting System**: Upvote/downvote broadcasts with instant optimistic UI updates
 - **Google OAuth**: Sign in with Google via Supabase Auth
 - **Timezone Support**: Automatic conversion to user's preferred timezone (12h/24h format)
 - **Smart Filtering**: Filter by sports, countries, events, and match status
 - **Search**: Find matches by team names, leagues, or sports
-- **Real-time Updates**: Supabase Realtime subscriptions for broadcasts and votes
+- **Real-time Updates**: Supabase Realtime subscriptions for match status, broadcasts, and votes
 - **Mobile-First Design**: Optimized for mobile (max-width: 440px)
 - **Admin Panel**: Import data, manage fixtures, view logs, manage users
 
@@ -78,13 +78,14 @@ sports-on-tv/
 │   ├── App.jsx                 # Main application
 │   └── main.jsx                # Entry point
 ├── supabase/
-│   ├── functions/              # Edge Functions (4 functions + shared utils)
+│   ├── functions/              # Edge Functions (5 functions + shared utils)
 │   │   ├── _shared/            # Shared API clients and transformers
 │   │   ├── fetch-all-sports/   # Fetch fixtures from TheSportsDB
 │   │   ├── fetch-broadcasts/   # Fetch TV broadcasts from TheSportsDB
+│   │   ├── fetch-livescores/   # Fetch livescores for match status/scores
 │   │   ├── cleanup-old-data/   # Delete past match data
 │   │   └── fetch-fixtures/     # Legacy fixture fetcher
-│   └── migrations/             # 8 database migrations
+│   └── migrations/             # 10 database migrations
 ├── .env.example                # Environment template
 ├── vite.config.js              # Vite configuration
 └── package.json                # Dependencies
@@ -98,6 +99,7 @@ Data is fetched automatically via Supabase pg_cron:
 |----------|----------|-------------|
 | Every 1 hour | `fetch-all-sports` | Fetch fixtures for today + tomorrow + day after |
 | Every 15 min | `fetch-broadcasts` | Fetch TV broadcasts and link to fixtures |
+| Every 2 min | `fetch-livescores` | Fetch live match status and scores |
 | Daily 3 AM UTC | `cleanup-old-data` | Delete past matches, broadcasts, and votes |
 
 GitHub Actions workflows are also available for manual triggering.
@@ -107,6 +109,7 @@ GitHub Actions workflows are also available for manual triggering.
 ```bash
 npx supabase functions deploy fetch-all-sports --no-verify-jwt
 npx supabase functions deploy fetch-broadcasts --no-verify-jwt
+npx supabase functions deploy fetch-livescores --no-verify-jwt
 npx supabase functions deploy cleanup-old-data --no-verify-jwt
 ```
 
@@ -139,7 +142,7 @@ npx supabase functions deploy cleanup-old-data --no-verify-jwt
 
 | Table | Purpose |
 |-------|---------|
-| `matches` | Sports fixtures (team, league, date, time, sport) |
+| `matches` | Sports fixtures (team, league, date, time, sport, status, scores) |
 | `broadcasts` | TV channels per match (with source: thesportsdb/user) |
 | `votes` | Community upvotes/downvotes on broadcasts |
 | `user_profiles` | User display names, avatars, preferences (JSONB) |
@@ -156,9 +159,9 @@ USA, UK, Canada, Australia, India, Germany, France, Spain, Italy, China, Turkey,
 
 Each country has predefined broadcast channel lists. Edit `src/config/constants.js` to add countries or channels.
 
-### Sport Colors & Durations
+### Sport Colors
 
-Sport-specific match durations (for status calculation) and UI color schemes are defined in `src/config/sports.js`. Sports are dynamically fetched from TheSportsDB.
+Sport-specific UI color schemes are defined in `src/config/sports.js`. Sports are dynamically fetched from TheSportsDB.
 
 ## Development
 
@@ -173,6 +176,7 @@ Sport-specific match durations (for status calculation) and UI color schemes are
 - **deploy.yml**: Auto-deploys to GitHub Pages on push to `main`
 - **fetch-all-sports.yml**: Manual workflow to fetch fixtures
 - **fetch-broadcasts.yml**: Manual workflow to fetch broadcasts
+- **fetch-livescores.yml**: Manual workflow to fetch livescores
 - **cleanup-old-data.yml**: Manual workflow to cleanup old data
 
 Required secrets: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `PROJECT_URL`, `SERVICE_ROLE_KEY`
@@ -193,12 +197,14 @@ Required secrets: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `PROJECT_URL`, 
 - [x] Broadcast source tracking (auto vs user)
 - [x] Real-time updates via Supabase subscriptions
 - [x] Automated data fetching (TheSportsDB API)
-- [x] pg_cron scheduling (fixtures hourly, broadcasts every 15 min)
+- [x] pg_cron scheduling (fixtures hourly, broadcasts every 15 min, livescores every 2 min)
 - [x] 13+ sports support
 - [x] Admin panel (import, manage, fixtures, users, logs)
 - [x] Optimistic UI updates for votes
 - [x] Automated cleanup of past data
 - [x] GitHub Pages deployment
+- [x] Server-driven livescores via TheSportsDB V2 API
+- [x] Real-time match status updates via Supabase Realtime
 
 ### Future Enhancements
 - [ ] User contribution history and profiles

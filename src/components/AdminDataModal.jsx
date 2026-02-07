@@ -52,6 +52,12 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
   const [cleaningUp, setCleaningUp] = useState(false)
   const [cleanupResult, setCleanupResult] = useState(null)
   const [showScrollHint, setShowScrollHint] = useState(false)
+  const [statusMappings, setStatusMappings] = useState([])
+  const [loadingStatuses, setLoadingStatuses] = useState(false)
+  const [newStatusCode, setNewStatusCode] = useState('')
+  const [newStatusCategory, setNewStatusCategory] = useState('live')
+  const [newStatusDesc, setNewStatusDesc] = useState('')
+  const [statusCategoryFilter, setStatusCategoryFilter] = useState('all')
   const scrollRef = useRef(null)
 
   const checkScroll = useCallback(() => {
@@ -768,13 +774,15 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
       loadUsers()
     } else if (activeTab === 'fixtures') {
       loadFixtures()
+    } else if (activeTab === 'status') {
+      loadStatusMappings()
     }
   }, [activeTab, logTypeFilter])
 
   // Re-check scroll indicator when tab or data changes
   useEffect(() => {
     requestAnimationFrame(checkScroll)
-  }, [activeTab, fixtures, users, logs, checkScroll])
+  }, [activeTab, fixtures, users, logs, statusMappings, checkScroll])
 
   const toggleDate = (date) => {
     setSelectedDates(prev =>
@@ -826,6 +834,87 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
     })
   }
 
+  const loadStatusMappings = async () => {
+    setLoadingStatuses(true)
+    try {
+      const { data, error } = await supabase
+        .from('status_mappings')
+        .select('*')
+        .order('display_category')
+        .order('raw_status')
+      if (error) throw error
+      setStatusMappings(data || [])
+    } catch (e) {
+      console.error('Error loading status mappings:', e)
+    }
+    setLoadingStatuses(false)
+  }
+
+  const handleAddStatusMapping = async () => {
+    if (!newStatusCode.trim()) return
+    setError("")
+    setSuccess("")
+    try {
+      const { error } = await supabase
+        .from('status_mappings')
+        .insert({
+          raw_status: newStatusCode.toUpperCase().trim(),
+          display_category: newStatusCategory,
+          description: newStatusDesc.trim() || null
+        })
+      if (error) throw error
+      setSuccess(`Added: ${newStatusCode.toUpperCase().trim()} → ${newStatusCategory}`)
+      setNewStatusCode('')
+      setNewStatusDesc('')
+      await loadStatusMappings()
+      onUpdate()
+      setTimeout(() => setSuccess(""), 3000)
+    } catch (e) {
+      setError('Error adding mapping: ' + e.message)
+      setTimeout(() => setError(""), 3000)
+    }
+  }
+
+  const handleDeleteStatusMapping = async (id, rawStatus) => {
+    setError("")
+    setSuccess("")
+    try {
+      const { error } = await supabase
+        .from('status_mappings')
+        .delete()
+        .eq('id', id)
+      if (error) throw error
+      setSuccess(`Removed: ${rawStatus}`)
+      await loadStatusMappings()
+      onUpdate()
+      setTimeout(() => setSuccess(""), 3000)
+    } catch (e) {
+      setError('Error deleting mapping: ' + e.message)
+      setTimeout(() => setError(""), 3000)
+    }
+  }
+
+  const getFilteredStatusMappings = () => {
+    if (statusCategoryFilter === 'all') return statusMappings
+    return statusMappings.filter(m => m.display_category === statusCategoryFilter)
+  }
+
+  const getCategoryColor = (cat) => {
+    if (cat === 'live') return '#e53935'
+    if (cat === 'upcoming') return '#26a69a'
+    if (cat === 'finished') return '#666'
+    if (cat === 'cancelled') return '#ff9800'
+    return '#888'
+  }
+
+  const getCategoryBg = (cat) => {
+    if (cat === 'live') return 'rgba(229,57,53,0.15)'
+    if (cat === 'upcoming') return 'rgba(38,166,154,0.15)'
+    if (cat === 'finished') return 'rgba(102,102,102,0.15)'
+    if (cat === 'cancelled') return 'rgba(255,152,0,0.15)'
+    return 'rgba(136,136,136,0.15)'
+  }
+
   const headerHeight = headerRef?.current?.offsetHeight || 56
 
   return (
@@ -866,6 +955,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
             { id: 'import', label: 'Import' },
             { id: 'fetch', label: 'Manage' },
             { id: 'fixtures', label: 'Fixtures' },
+            { id: 'status', label: 'Status' },
             { id: 'users', label: 'Users' },
             { id: 'logs', label: 'Logs' }
           ].map(tab => {
@@ -1413,6 +1503,210 @@ Example broadcasts:
                     })}
                   </div>
                 </>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'status' && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 8 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ fontSize: 11, color: "#888" }}>
+                    {statusMappings.length} mapping{statusMappings.length !== 1 ? 's' : ''} total
+                  </div>
+                  <button
+                    onClick={loadStatusMappings}
+                    disabled={loadingStatuses}
+                    style={{
+                      padding: "4px 10px",
+                      borderRadius: 6,
+                      border: "1px solid #2a2a4a",
+                      background: "rgba(255,255,255,0.05)",
+                      color: "#aaa",
+                      fontSize: 10,
+                      cursor: loadingStatuses ? "not-allowed" : "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4
+                    }}
+                  >
+                    <Icon name="refresh" size={10} />
+                    {loadingStatuses ? "..." : "Refresh"}
+                  </button>
+                </div>
+
+                {/* Category filter */}
+                <select
+                  value={statusCategoryFilter}
+                  onChange={(e) => setStatusCategoryFilter(e.target.value)}
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 6,
+                    border: "1px solid #2a2a4a",
+                    background: "#111122",
+                    color: "#aaa",
+                    fontSize: 11,
+                    outline: "none",
+                    cursor: "pointer"
+                  }}
+                >
+                  <option value="all">All Categories</option>
+                  <option value="live">Live</option>
+                  <option value="upcoming">Upcoming</option>
+                  <option value="finished">Finished</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
+
+              {error && <div style={{ padding: 8, marginBottom: 4, background: "rgba(244,67,54,0.15)", border: "1px solid rgba(244,67,54,0.3)", borderRadius: 6, color: "#e57373", fontSize: 11 }}>{error}</div>}
+              {success && <div style={{ padding: 8, marginBottom: 4, background: "rgba(76,175,80,0.15)", border: "1px solid rgba(76,175,80,0.3)", borderRadius: 6, color: "#81c784", fontSize: 11 }}>{success}</div>}
+
+              {/* Add new mapping form */}
+              <div style={{
+                padding: 10,
+                background: "rgba(255,255,255,0.03)",
+                border: "1px solid #2a2a4a",
+                borderRadius: 6,
+                display: "flex",
+                gap: 6,
+                alignItems: "center",
+                flexWrap: "wrap"
+              }}>
+                <input
+                  value={newStatusCode}
+                  onChange={(e) => setNewStatusCode(e.target.value)}
+                  placeholder="Code (e.g. R1)"
+                  style={{
+                    padding: "6px 8px",
+                    borderRadius: 4,
+                    border: "1px solid #2a2a4a",
+                    background: "#111122",
+                    color: "#fff",
+                    fontSize: 11,
+                    outline: "none",
+                    width: 80,
+                    fontFamily: "monospace"
+                  }}
+                />
+                <select
+                  value={newStatusCategory}
+                  onChange={(e) => setNewStatusCategory(e.target.value)}
+                  style={{
+                    padding: "6px 8px",
+                    borderRadius: 4,
+                    border: "1px solid #2a2a4a",
+                    background: "#111122",
+                    color: "#aaa",
+                    fontSize: 11,
+                    outline: "none",
+                    cursor: "pointer"
+                  }}
+                >
+                  <option value="live">live</option>
+                  <option value="upcoming">upcoming</option>
+                  <option value="finished">finished</option>
+                  <option value="cancelled">cancelled</option>
+                </select>
+                <input
+                  value={newStatusDesc}
+                  onChange={(e) => setNewStatusDesc(e.target.value)}
+                  placeholder="Description"
+                  style={{
+                    padding: "6px 8px",
+                    borderRadius: 4,
+                    border: "1px solid #2a2a4a",
+                    background: "#111122",
+                    color: "#fff",
+                    fontSize: 11,
+                    outline: "none",
+                    flex: 1,
+                    minWidth: 80
+                  }}
+                />
+                <button
+                  onClick={handleAddStatusMapping}
+                  disabled={!newStatusCode.trim()}
+                  style={{
+                    padding: "6px 12px",
+                    borderRadius: 4,
+                    border: "none",
+                    background: newStatusCode.trim() ? "#00e5ff" : "#2a2a4a",
+                    color: newStatusCode.trim() ? "#000" : "#666",
+                    fontSize: 10,
+                    fontWeight: 700,
+                    cursor: newStatusCode.trim() ? "pointer" : "not-allowed"
+                  }}
+                >
+                  Add
+                </button>
+              </div>
+
+              {/* Mappings list */}
+              {loadingStatuses ? (
+                <div style={{ textAlign: "center", padding: 40, color: "#555" }}>
+                  <div style={{ fontSize: 12 }}>Loading status mappings...</div>
+                </div>
+              ) : getFilteredStatusMappings().length === 0 ? (
+                <div style={{ textAlign: "center", padding: 40, color: "#444" }}>
+                  <p style={{ margin: 0, fontSize: 12 }}>No mappings found</p>
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {getFilteredStatusMappings().map(mapping => (
+                    <div
+                      key={mapping.id}
+                      style={{
+                        padding: "8px 10px",
+                        background: "rgba(255,255,255,0.03)",
+                        border: "1px solid #2a2a4a",
+                        borderRadius: 6,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8
+                      }}
+                    >
+                      <span style={{
+                        fontFamily: "monospace",
+                        fontSize: 12,
+                        color: "#fff",
+                        fontWeight: 600,
+                        minWidth: 40
+                      }}>
+                        {mapping.raw_status}
+                      </span>
+                      <span style={{
+                        padding: "2px 8px",
+                        borderRadius: 4,
+                        background: getCategoryBg(mapping.display_category),
+                        color: getCategoryColor(mapping.display_category),
+                        fontSize: 9,
+                        fontWeight: 700,
+                        textTransform: "uppercase"
+                      }}>
+                        {mapping.display_category}
+                      </span>
+                      <span style={{ flex: 1, fontSize: 10, color: "#666" }}>
+                        {mapping.description || ''}
+                      </span>
+                      <button
+                        onClick={() => handleDeleteStatusMapping(mapping.id, mapping.raw_status)}
+                        style={{
+                          padding: "2px 6px",
+                          borderRadius: 4,
+                          border: "1px solid rgba(244,67,54,0.3)",
+                          background: "transparent",
+                          color: "#e57373",
+                          fontSize: 10,
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center"
+                        }}
+                      >
+                        <Icon name="x" size={10} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           )}

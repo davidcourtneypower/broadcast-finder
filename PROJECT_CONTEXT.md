@@ -18,18 +18,19 @@
 ## Key Features
 
 ### Core Functionality
-1. **Automated Data Fetching**: Fixtures fetched hourly, broadcasts every 15 minutes via pg_cron
-2. **Match Listings**: Browse 13+ sports with team names, leagues, dates, and times
-3. **Broadcast Information**: Auto-fetched from TheSportsDB + community-contributed channels
-4. **Voting System**: Upvote/downvote broadcasts with optimistic UI updates
-5. **User Authentication**: Google OAuth via Supabase Auth
-6. **User Preferences**: Personalized timezone and time format (12h/24h) settings
-7. **Timezone Support**: Automatic conversion of match times to user's preferred timezone
-8. **Admin Panel**: Full admin interface with Import, Manage, Fixtures, Users, and Logs tabs
-9. **Live Indicators**: Real-time status indicators (LIVE, STARTING SOON, UPCOMING, FINISHED)
-10. **Broadcast Source Tracking**: Distinguish between auto-fetched and user-contributed data
-11. **Real-time Subscriptions**: Supabase Realtime for broadcasts and votes changes
-12. **Data Cleanup**: Automated daily cleanup of past matches via pg_cron
+1. **Automated Data Fetching**: Fixtures fetched hourly, broadcasts every 15 minutes, livescores every 2 minutes via pg_cron
+2. **Livescore Integration**: Server-driven match status via TheSportsDB V2 livescore API (2-minute updates)
+3. **Match Listings**: Browse 13+ sports with team names, leagues, dates, and times
+4. **Broadcast Information**: Auto-fetched from TheSportsDB + community-contributed channels
+5. **Voting System**: Upvote/downvote broadcasts with optimistic UI updates
+6. **User Authentication**: Google OAuth via Supabase Auth
+7. **User Preferences**: Personalized timezone and time format (12h/24h) settings
+8. **Timezone Support**: Automatic conversion of match times to user's preferred timezone
+9. **Admin Panel**: Full admin interface with Import, Manage, Fixtures, Users, and Logs tabs
+10. **Live Indicators**: Server-driven status indicators (LIVE, STARTING SOON, UPCOMING, FINISHED, CANCELLED)
+11. **Broadcast Source Tracking**: Distinguish between auto-fetched and user-contributed data
+12. **Real-time Subscriptions**: Supabase Realtime for matches, broadcasts, and votes changes
+13. **Data Cleanup**: Automated daily cleanup of past matches via pg_cron
 
 ### User Experience
 - **Search**: Search by team names, leagues, or sports
@@ -48,6 +49,7 @@ sports-on-tv/
 │       ├── deploy.yml                  # Auto-deploy to GitHub Pages on push
 │       ├── fetch-all-sports.yml        # Manual: fetch fixtures
 │       ├── fetch-broadcasts.yml        # Manual: fetch broadcasts
+│       ├── fetch-livescores.yml        # Manual: fetch livescores
 │       └── cleanup-old-data.yml        # Manual: cleanup old data
 ├── src/
 │   ├── components/
@@ -69,7 +71,7 @@ sports-on-tv/
 │   │   ├── useAuth.js                  # Authentication hook (Google OAuth)
 │   │   └── useUserPreferences.js       # Timezone/time format hook
 │   ├── utils/
-│   │   ├── helpers.js                  # Date helpers, flag mapping, status calculation
+│   │   ├── helpers.js                  # Date helpers, flag mapping
 │   │   ├── timeFormatting.js           # Timezone conversion and formatting
 │   │   └── userProfiles.js             # User profile CRUD utilities
 │   ├── App.jsx                         # Main application component
@@ -88,6 +90,7 @@ sports-on-tv/
 │   │   ├── cleanup-old-data/           # Delete past matches/broadcasts/votes
 │   │   ├── fetch-all-sports/           # Fetch fixtures from TheSportsDB
 │   │   ├── fetch-broadcasts/           # Fetch TV broadcasts from TheSportsDB
+│   │   ├── fetch-livescores/           # Fetch livescores for match status/scores
 │   │   └── fetch-fixtures/             # Legacy fixture fetching (modular)
 │   ├── migrations/
 │   │   ├── 20260204000001_basketball_support.sql
@@ -97,7 +100,11 @@ sports-on-tv/
 │   │   ├── 20260205000001_enhanced_admin_features.sql
 │   │   ├── 20260205000002_add_broadcast_unique_constraint.sql
 │   │   ├── 20260206000001_thesportsdb_v2_migration.sql
-│   │   └── 20260207000001_schedule_cron_jobs.sql
+│   │   ├── 20260207000001_schedule_cron_jobs.sql
+│   │   ├── 20260207000002_reference_tables.sql
+│   │   ├── 20260207000003_admin_delete_broadcasts.sql
+│   │   ├── 20260208000001_livescore_support.sql
+│   │   └── 20260208000002_schedule_livescore_cron.sql
 │   ├── config.toml                     # Supabase project configuration
 │   └── README.md                       # Supabase setup docs
 ├── .env                                # Environment variables (not in git)
@@ -123,8 +130,12 @@ sports-on-tv/
    - `country`: Country code
    - `match_date`: Date string (YYYY-MM-DD, stored in UTC)
    - `match_time`: Time string (HH:MM, stored in UTC)
-   - `status`: Match status (calculated dynamically on client)
+   - `status`: Match status (`upcoming`, `live`, `finished`, `cancelled` — server-driven via livescores; `starting-soon` is client-side only)
+   - `home_score`: Home team score (INTEGER, nullable — updated by livescores)
+   - `away_score`: Away team score (INTEGER, nullable — updated by livescores)
+   - `last_livescore_update`: Timestamp of last livescore update (for disappearance detection)
    - `created_at`: Timestamp
+   - `updated_at`: Timestamp (auto-updated via trigger)
 
 2. **broadcasts**
    - `id`: UUID primary key
@@ -157,7 +168,7 @@ sports-on-tv/
 
 5. **api_fetch_logs**
    - `id`: Primary key
-   - `fetch_type`: Type of fetch (`"fixtures"`, `"broadcasts"`, `"cleanup"`)
+   - `fetch_type`: Type of fetch (`"fixtures"`, `"broadcasts"`, `"livescores-scheduled"`, `"livescores-manual"`, `"cleanup"`)
    - `sport`: Sport fetched (or `"all"`)
    - `fetch_date`: Date of fetch
    - `status`: `"success"` or `"error"`
@@ -186,6 +197,18 @@ sports-on-tv/
 - **Body**: `{"dates": ["today", "tomorrow", "day_after_tomorrow"], "trigger": "scheduled|manual"}`
 - **Behavior**: Upserts on `(match_id, channel, country, source)` - only updates system broadcasts, never touches user broadcasts
 
+### fetch-livescores
+- **Schedule**: Every 2 minutes via pg_cron (24/7)
+- **Purpose**: Fetches live match status and scores from TheSportsDB V2 livescore API
+- **Endpoint**: `POST /functions/v1/fetch-livescores`
+- **Body**: `{"trigger": "scheduled|manual"}`
+- **API**: `GET /api/v2/json/livescore/all` (V2 header auth, max 500 results)
+- **Behavior**:
+  - Maps `strProgress` to status: `NS`/`TBD` → `upcoming`, `1H`/`2H`/`HT`/`ET`/`Q1-Q4`/`OT` etc. → `live`, `FT`/`AET`/`PEN` etc. → `finished`, `CANC`/`PST`/`ABD` etc. → `cancelled`
+  - Updates `status`, `home_score`, `away_score`, `last_livescore_update` on matching rows
+  - **Disappearance detection**: Matches with `status='live'` in DB but absent from feed for >5 minutes → marked as `finished`
+- **Note**: `fetch-all-sports` upserts do NOT include `status` field, preventing hourly fixture fetches from overwriting livescore data
+
 ### cleanup-old-data
 - **Schedule**: Daily at 03:00 UTC via pg_cron
 - **Purpose**: Deletes matches, broadcasts, and votes for dates before today
@@ -196,7 +219,10 @@ sports-on-tv/
 Automated scheduling is configured via pg_cron + pg_net in the Supabase database:
 - Fixtures: `0 * * * *` (every hour)
 - Broadcasts: `*/15 * * * *` (every 15 minutes)
+- Livescores: `*/2 * * * *` (every 2 minutes, 24/7)
 - Cleanup: `0 3 * * *` (daily at 3 AM UTC)
+
+API budget: ~35 calls/hour (fixtures 1/hr + broadcasts 4/hr + livescores 30/hr). Business tier allows 120/minute.
 
 Secrets stored in Supabase Vault (`project_url`, `service_role_key`).
 
@@ -235,9 +261,10 @@ Each country has predefined broadcast channel lists in [src/config/constants.js]
 1. **App.jsx**: Main container component
    - Manages global state (user, matches, filters, pagination)
    - Batched Supabase queries (50 IDs per batch) to avoid URL length limits
-   - Real-time subscriptions for broadcasts and votes
+   - Real-time subscriptions for matches (status changes), broadcasts, and votes
    - Optimistic UI updates for votes and broadcast deletion
-   - Status calculation (live/upcoming/finished) based on sport-specific durations
+   - Server-driven status from DB with client-side "starting-soon" overlay (15 min before match)
+   - 60-second timer to re-evaluate "starting-soon" for upcoming matches
 
 2. **FixtureCard.jsx**: Individual match display
    - Expandable to show broadcasts
@@ -271,7 +298,7 @@ Each country has predefined broadcast channel lists in [src/config/constants.js]
 
 2. **useUserPreferences**: Timezone and formatting hook
    - Loads preferences from `user_profiles.preferences` JSONB
-   - Provides `formatTime()`, `getStatus()`, `getRelative()`
+   - Provides `formatTime()`, `getRelative()`
    - Falls back to browser timezone
 
 ## Data Flow
@@ -279,6 +306,7 @@ Each country has predefined broadcast channel lists in [src/config/constants.js]
 1. **Automated Fetching** (pg_cron):
    - Every hour: fetch fixtures for today + tomorrow + day after tomorrow
    - Every 15 min: fetch broadcasts and link to existing fixtures
+   - Every 2 min: fetch livescores and update match status/scores
    - Daily at 3 AM: cleanup past match data
 
 2. **Loading Matches** (App.jsx):
@@ -287,9 +315,11 @@ Each country has predefined broadcast channel lists in [src/config/constants.js]
    - Fetch votes in batches of 50 broadcast IDs
    - Compute vote statistics per broadcast
    - Enrich matches with broadcasts and stats
-   - Calculate status dynamically based on sport-specific duration
+   - Use DB-driven `status` field (server-set by livescores)
+   - Apply client-side "starting-soon" overlay for upcoming matches within 15 min of start
 
 3. **Real-time Updates**:
+   - Matches channel: UPDATE merges new status/scores into state (with starting-soon overlay)
    - Broadcasts channel: INSERT adds to state, DELETE removes from state
    - Votes channel: INSERT/DELETE trigger refetch of that broadcast's votes
    - Optimistic updates for user's own votes (immediate UI feedback)
@@ -310,7 +340,8 @@ Each country has predefined broadcast channel lists in [src/config/constants.js]
 1. **deploy.yml**: Auto-deploy to GitHub Pages on push to `main`
 2. **fetch-all-sports.yml**: Manual trigger to fetch fixtures (3-day range)
 3. **fetch-broadcasts.yml**: Manual trigger to fetch broadcasts (3-day range)
-4. **cleanup-old-data.yml**: Manual trigger to cleanup past data
+4. **fetch-livescores.yml**: Manual trigger to fetch livescores
+5. **cleanup-old-data.yml**: Manual trigger to cleanup past data
 
 Required GitHub Secrets: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `PROJECT_URL`, `SERVICE_ROLE_KEY`
 
@@ -329,7 +360,7 @@ Required GitHub Secrets: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `PROJECT
 ### State Management
 - React useState hooks (no Redux or Context)
 - Supabase Auth for authentication state (stable references via useRef)
-- Real-time subscriptions for broadcasts and votes
+- Real-time subscriptions for matches (status), broadcasts, and votes
 - Optimistic updates for votes and deletions
 - Batched queries (50 IDs per request) to avoid HTTP URL length limits
 
@@ -359,6 +390,7 @@ npm run preview    # Preview production build
 ```bash
 npx supabase functions deploy fetch-all-sports --no-verify-jwt
 npx supabase functions deploy fetch-broadcasts --no-verify-jwt
+npx supabase functions deploy fetch-livescores --no-verify-jwt
 npx supabase functions deploy cleanup-old-data --no-verify-jwt
 ```
 

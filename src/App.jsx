@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from './config/supabase'
 import { useAuth } from './hooks/useAuth'
-import { getTodayStr, getTomorrowStr } from './utils/helpers'
+import { getTodayStr, getTomorrowStr, createStatusMapper } from './utils/helpers'
 import { useUserPreferences } from './hooks/useUserPreferences'
 import { DATE_TABS } from './config/constants'
 import { Icon } from './components/Icon'
@@ -15,7 +15,8 @@ import { useReferenceData } from './hooks/useReferenceData'
 
 function App() {
   const { user, loading: authLoading, signInWithGoogle, signOut } = useAuth()
-  const { getSportConfig, getSportColors, getFlag, getCountryNames, getChannelsForCountry } = useReferenceData()
+  const { getSportConfig, getSportColors, getFlag, getCountryNames, getChannelsForCountry, getStatusMap, reload: reloadReferenceData } = useReferenceData()
+  const mapStatus = useMemo(() => createStatusMapper(getStatusMap()), [getStatusMap])
   const { formatTime, getStatus: getUserStatus, getRelative, preferences, loading: prefsLoading } = useUserPreferences(user)
   const [isAdmin, setIsAdmin] = useState(false)
   const headerRef = useRef(null)
@@ -148,8 +149,8 @@ function App() {
               voteStats: votesByBroadcast[b.id] || { up: 0, down: 0, myVote: null }
             }))
 
-          // Use DB status, with client-side "starting-soon" overlay
-          let displayStatus = m.status || 'upcoming'
+          // Map raw API status from DB, with client-side "starting-soon" overlay
+          let displayStatus = mapStatus(m.status)
           if (displayStatus === 'upcoming') {
             if (isStartingSoon(m.match_date, m.match_time)) {
               displayStatus = 'starting-soon'
@@ -279,8 +280,8 @@ function App() {
           setMatches(prev => prev.map(m => {
             if (m.id !== updated.id) return m
 
-            // Apply starting-soon overlay on the new DB status
-            let displayStatus = updated.status || 'upcoming'
+            // Map raw API status, apply starting-soon overlay
+            let displayStatus = mapStatus(updated.status)
             if (displayStatus === 'upcoming') {
               if (isStartingSoon(updated.match_date || m.match_date, updated.match_time || m.match_time)) {
                 displayStatus = 'starting-soon'
@@ -855,7 +856,7 @@ function App() {
       {showAuth && <AuthModal onClose={() => setShowAuth(false)} signInWithGoogle={signInWithGoogle} />}
       {showFilters && <FilterModal onClose={() => setShowFilters(false)} filters={filters} onApply={setFilters} allSports={allSports} matches={matches} getSportColors={getSportColors} getFlag={getFlag} headerRef={headerRef} />}
       {showAddBroadcast && selectedMatch && <AddBroadcastModal onClose={() => setShowAddBroadcast(false)} match={selectedMatch} onAdd={handleAddBroadcast} user={user} countryNames={getCountryNames()} getChannelsForCountry={getChannelsForCountry} getFlag={getFlag} />}
-      {showAdminPanel && <AdminDataModal onClose={() => setShowAdminPanel(false)} onUpdate={loadMatches} currentUserEmail={user?.email} headerRef={headerRef} />}
+      {showAdminPanel && <AdminDataModal onClose={() => setShowAdminPanel(false)} onUpdate={() => { reloadReferenceData(); loadMatches() }} currentUserEmail={user?.email} headerRef={headerRef} />}
       {showUserSettings && <UserSettingsModal onClose={() => setShowUserSettings(false)} onSave={handleSettingsSaved} user={user} headerRef={headerRef} />}
     </div>
   )
