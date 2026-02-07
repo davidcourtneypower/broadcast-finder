@@ -485,6 +485,22 @@ function App() {
     setDisplayLimit(fixturesPerPage)
   }, [filters, search, dateTab, fixturesPerPage])
 
+  // Check if a match is within N minutes of starting (for "starting-soon" overlay)
+  // This is client-side only since the livescore API only reports "NS" before kickoff
+  const startingSoonMinutes = getConfig('starting_soon_minutes', 15)
+  const isStartingSoon = (eventDate, eventTime) => {
+    try {
+      let timeStr = eventTime.trim()
+      if (timeStr.split(':').length === 2) timeStr = `${timeStr}:00`
+      const matchDateTime = new Date(`${eventDate}T${timeStr}Z`)
+      if (isNaN(matchDateTime.getTime())) return false
+      const diffMinutes = (matchDateTime - new Date()) / (1000 * 60)
+      return diffMinutes > 0 && diffMinutes <= startingSoonMinutes
+    } catch {
+      return false
+    }
+  }
+
   // Periodically re-evaluate "starting-soon" for upcoming matches
   // The livescore API only reports "NS" before a match, so starting-soon is client-side
   const statusRefreshMs = getConfig('status_refresh_seconds', 60) * 1000
@@ -515,22 +531,6 @@ function App() {
   const todayStr = getTodayStr()
   const tomorrowStr = getTomorrowStr()
   const hasActiveFilters = filters.sports?.length > 0 || filters.countries?.length > 0 || filters.events?.length > 0 || filters.statuses?.length > 0
-
-  // Check if a match is within N minutes of starting (for "starting-soon" overlay)
-  // This is client-side only since the livescore API only reports "NS" before kickoff
-  const startingSoonMinutes = getConfig('starting_soon_minutes', 15)
-  const isStartingSoon = (eventDate, eventTime) => {
-    try {
-      let timeStr = eventTime.trim()
-      if (timeStr.split(':').length === 2) timeStr = `${timeStr}:00`
-      const matchDateTime = new Date(`${eventDate}T${timeStr}Z`)
-      if (isNaN(matchDateTime.getTime())) return false
-      const diffMinutes = (matchDateTime - new Date()) / (1000 * 60)
-      return diffMinutes > 0 && diffMinutes <= startingSoonMinutes
-    } catch {
-      return false
-    }
-  }
 
   const filtered = useMemo(() => {
     let result = matches.filter(m => {
