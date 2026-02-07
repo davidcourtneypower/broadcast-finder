@@ -4,12 +4,12 @@ on:
   workflow_dispatch:
 
 jobs:
-  fetch-all-sports:
+  fetch-events:
     runs-on: ubuntu-latest
     steps:
       - name: Fetch All Sports Events from TheSportsDB
         run: |
-          curl -X POST "${{ secrets.PROJECT_URL }}/functions/v1/fetch-all-sports" \
+          curl -X POST "${{ secrets.PROJECT_URL }}/functions/v1/fetch-events" \
             -H "Authorization: Bearer ${{ secrets.SERVICE_ROLE_KEY }}" \
             -H "Content-Type: application/json" \
             -d '{"dates":["today","tomorrow","day_after_tomorrow"],"trigger":"manual"}'

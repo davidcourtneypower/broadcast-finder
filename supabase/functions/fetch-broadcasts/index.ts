@@ -9,7 +9,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { TheSportsDBv2Client, TheSportsDBTVEvent } from './_shared/thesportsdb-v2-client.ts';
 
 interface BroadcastInsert {
-  match_id: string;
+  event_id: string;
   country: string;
   channel: string;
   created_by: string;
@@ -221,25 +221,25 @@ serve(async (req) => {
 
     console.log(`Starting broadcast fetch for dates: ${datesToFetch.join(', ')}, trigger: ${trigger}`);
 
-    // Log sample sportsdb_event_ids from matches table for debugging
-    const { data: sampleMatches } = await supabase
-      .from('matches')
-      .select('sportsdb_event_id, home, away')
+    // Log sample sportsdb_event_ids from events table for debugging
+    const { data: sampleEvents } = await supabase
+      .from('events')
+      .select('sportsdb_event_id, home, away, event_name')
       .not('sportsdb_event_id', 'is', null)
       .limit(5);
 
-    if (sampleMatches && sampleMatches.length > 0) {
-      const sampleDbIds = sampleMatches.map(m => m.sportsdb_event_id).join(', ');
+    if (sampleEvents && sampleEvents.length > 0) {
+      const sampleDbIds = sampleEvents.map(m => m.sportsdb_event_id).join(', ');
       console.log(`Sample DB sportsdb_event_ids: ${sampleDbIds}`);
-      console.log(`Sample matches: ${sampleMatches.map(m => `${m.home} vs ${m.away}`).join(', ')}`);
+      console.log(`Sample events: ${sampleEvents.map(m => m.home && m.away ? `${m.home} vs ${m.away}` : m.event_name || 'Unknown').join(', ')}`);
     } else {
-      console.warn('NO matches found with sportsdb_event_id populated!');
+      console.warn('NO events found with sportsdb_event_id populated!');
 
-      // Check if there are any matches at all
+      // Check if there are any events at all
       const { count } = await supabase
-        .from('matches')
+        .from('events')
         .select('*', { count: 'exact', head: true });
-      console.log(`Total matches in DB: ${count}`);
+      console.log(`Total events in DB: ${count}`);
     }
 
     // Track statistics
@@ -282,28 +282,28 @@ serve(async (req) => {
           }
 
           // Direct lookup by TheSportsDB event ID (use limit(1) to avoid single() errors)
-          const { data: matches, error: matchError } = await supabase
-            .from('matches')
+          const { data: eventRows, error: eventError } = await supabase
+            .from('events')
             .select('id, sportsdb_event_id')
             .eq('sportsdb_event_id', tvEvent.idEvent)
             .limit(1);
 
-          if (matchError) {
-            console.error(`Query error for event ${tvEvent.idEvent}: ${matchError.message}`);
+          if (eventError) {
+            console.error(`Query error for event ${tvEvent.idEvent}: ${eventError.message}`);
             totalUnmatched++;
             continue;
           }
 
-          if (!matches || matches.length === 0) {
+          if (!eventRows || eventRows.length === 0) {
             totalUnmatched++;
             // Only log first few unmatched to avoid log spam
             if (totalUnmatched <= 5) {
-              console.log(`No match found for event ${tvEvent.idEvent}: ${tvEvent.strEvent}`);
+              console.log(`No event found for ${tvEvent.idEvent}: ${tvEvent.strEvent}`);
             }
             continue;
           }
 
-          const match = matches[0];
+          const matchedEvent = eventRows[0];
           totalMatched++;
 
           // API returns strChannel (one channel per entry), not strTVStation
@@ -312,7 +312,7 @@ serve(async (req) => {
 
           if (channel) {
             allBroadcasts.push({
-              match_id: match.id,
+              event_id: matchedEvent.id,
               country,
               channel,
               created_by: 'system',
@@ -326,7 +326,7 @@ serve(async (req) => {
         // Deduplicate broadcasts
         const seen = new Map<string, BroadcastInsert>();
         for (const broadcast of allBroadcasts) {
-          const key = `${broadcast.match_id}|${broadcast.channel.toLowerCase()}|${broadcast.country.toLowerCase()}`;
+          const key = `${broadcast.event_id}|${broadcast.channel.toLowerCase()}|${broadcast.country.toLowerCase()}`;
           seen.set(key, broadcast);
         }
         const uniqueBroadcasts = Array.from(seen.values());
@@ -343,7 +343,7 @@ serve(async (req) => {
             const { error: insertError } = await supabase
               .from('broadcasts')
               .upsert(batch, {
-                onConflict: 'match_id,channel,country,source',
+                onConflict: 'event_id,channel,country,source',
                 ignoreDuplicates: false
               });
 

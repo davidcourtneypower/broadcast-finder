@@ -1,19 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../config/supabase'
 
-// Fallback sport durations (matches current sports.js values)
-const FALLBACK_DURATIONS = {
-  'Soccer': 120, 'Football': 120, 'Basketball': 150,
-  'American Football': 210, 'Ice Hockey': 150, 'Tennis': 180,
-  'Baseball': 210, 'Rugby': 120, 'Cricket': 480, 'Golf': 300,
-  'Motorsport': 180, 'Boxing': 60, 'MMA': 60,
-  'Volleyball': 120, 'Handball': 90,
-  'Field Hockey': 90, 'Fighting': 60, 'Olympics': 180,
-  'Skating': 120, 'Snooker': 300, 'Wintersports': 150,
-  'Gaelic': 90, 'Skiing': 150
-}
-
-// Fallback sport colors (matches current sports.js values)
+// Fallback sport colors
 const FALLBACK_COLORS = {
   'Soccer': { accent: '#00e5ff', bg: 'rgba(0,229,255,0.12)' },
   'Football': { accent: '#00e5ff', bg: 'rgba(0,229,255,0.12)' },
@@ -42,8 +30,6 @@ const FALLBACK_COLORS = {
 
 const DEFAULT_ACCENT = '#00e5ff'
 const DEFAULT_BG = 'rgba(0,229,255,0.12)'
-const DEFAULT_DURATION = 150
-const DEFAULT_PREGAME = 15
 
 // Fallback flag map (matches current constants.js FLAG_MAP)
 const FALLBACK_FLAGS = {
@@ -105,30 +91,6 @@ export const useReferenceData = () => {
     loadReferenceData()
   }, [loadReferenceData])
 
-  // Get sport config (for status calculation) with fallback
-  const getSportConfig = useCallback((sportName) => {
-    if (!sportName) return null
-
-    const dbSport = sports.find(s => s.name === sportName)
-    if (dbSport) {
-      return {
-        name: sportName,
-        matchDuration: dbSport.duration_minutes,
-        pregameWindow: dbSport.pregame_window_minutes,
-        colors: { accent: dbSport.accent_color, bg: dbSport.bg_color }
-      }
-    }
-
-    // Fallback to hardcoded values
-    const fallbackColors = FALLBACK_COLORS[sportName] || { accent: DEFAULT_ACCENT, bg: DEFAULT_BG }
-    return {
-      name: sportName,
-      matchDuration: FALLBACK_DURATIONS[sportName] || DEFAULT_DURATION,
-      pregameWindow: DEFAULT_PREGAME,
-      colors: fallbackColors
-    }
-  }, [sports])
-
   // Get sport colors with fallback
   const getSportColors = useCallback((sportName) => {
     if (!sportName) return { accent: DEFAULT_ACCENT, bg: DEFAULT_BG, glow: 'rgba(0,229,255,0.25)' }
@@ -184,7 +146,7 @@ export const useReferenceData = () => {
   return {
     sports, leagues, countries, countryChannels, statusMappings,
     loading, reload: loadReferenceData,
-    getSportConfig, getSportColors, getFlag,
+    getSportColors, getFlag,
     getChannelsForCountry, getCountryNames, getStatusMap, getConfig
   }
 }

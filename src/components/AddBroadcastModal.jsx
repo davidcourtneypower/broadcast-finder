@@ -57,7 +57,7 @@ export const AddBroadcastModal = ({ onClose, match, onAdd, user, countryNames, g
         <h3 style={{ color: "#fff", margin: "0 0 16px", fontSize: 16 }}>Add Broadcast Info</h3>
         <div style={{ marginBottom: 12, padding: 10, background: "rgba(255,255,255,0.03)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.08)" }}>
           <div style={{ fontSize: 11, color: "#888", marginBottom: 4 }}>{match.league}</div>
-          <div style={{ fontSize: 13, color: "#fff", fontWeight: 600 }}>{match.home} vs {match.away}</div>
+          <div style={{ fontSize: 13, color: "#fff", fontWeight: 600 }}>{match.home && match.away ? `${match.home} vs ${match.away}` : match.event_name || match.league || 'Event'}</div>
         </div>
         <div style={{ marginBottom: 16 }}>
           <label style={{ color: "#aaa", fontSize: 11, fontFamily: "monospace", textTransform: "uppercase", letterSpacing: 1, display: "block", marginBottom: 6 }}>Country/Region</label>

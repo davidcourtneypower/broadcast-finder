@@ -6,7 +6,7 @@
 import { TheSportsDBTVEvent } from './thesportsdb-client.ts';
 
 export interface BroadcastInsert {
-  match_id: string;
+  event_id: string;
   country: string;
   channel: string;
   created_by: string;
@@ -136,7 +136,7 @@ export function transformTheSportsDBTVToBroadcasts(
 
   for (const { channel, country } of stations) {
     broadcasts.push({
-      match_id: matchId,
+      event_id: matchId,
       country: country,
       channel: channel,
       created_by: 'system',
@@ -150,14 +150,14 @@ export function transformTheSportsDBTVToBroadcasts(
 }
 
 /**
- * Deduplicate broadcasts by match_id + channel + country combination
+ * Deduplicate broadcasts by event_id + channel + country combination
  * Keeps the one with highest confidence score
  */
 export function deduplicateBroadcasts(broadcasts: BroadcastInsert[]): BroadcastInsert[] {
   const seen = new Map<string, BroadcastInsert>();
 
   for (const broadcast of broadcasts) {
-    const key = `${broadcast.match_id}|${broadcast.channel.toLowerCase()}|${broadcast.country.toLowerCase()}`;
+    const key = `${broadcast.event_id}|${broadcast.channel.toLowerCase()}|${broadcast.country.toLowerCase()}`;
 
     const existing = seen.get(key);
     if (!existing || broadcast.confidence_score > existing.confidence_score) {

@@ -19,13 +19,13 @@ serve(async (req) => {
 
     const today = new Date().toISOString().split('T')[0];
 
-    console.log(`Starting cleanup for matches before ${today}`);
+    console.log(`Starting cleanup for events before ${today}`);
 
-    // Get matches before today (to find related broadcasts/votes)
+    // Get events before today (to find related broadcasts/votes)
     const { data: oldMatches } = await supabase
-      .from('matches')
+      .from('events')
       .select('id')
-      .lt('match_date', today);
+      .lt('event_date', today);
 
     if (!oldMatches || oldMatches.length === 0) {
       console.log('No old data to clean');
@@ -44,24 +44,24 @@ serve(async (req) => {
       return new Response(JSON.stringify({
         success: true,
         message: 'No old data to clean',
-        deleted: { matches: 0, broadcasts: 0, votes: 0 }
+        deleted: { events: 0, broadcasts: 0, votes: 0 }
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const oldMatchIds = oldMatches.map(m => m.id);
-    console.log(`Found ${oldMatchIds.length} old matches to delete`);
+    console.log(`Found ${oldMatchIds.length} old events to delete`);
 
-    // Get broadcasts for old matches (to find votes)
+    // Get broadcasts for old events (to find votes)
     const { data: oldBroadcasts } = await supabase
       .from('broadcasts')
       .select('id')
-      .in('match_id', oldMatchIds);
+      .in('event_id', oldMatchIds);
 
     const oldBroadcastIds = (oldBroadcasts || []).map(b => b.id);
     console.log(`Found ${oldBroadcastIds.length} old broadcasts to delete`);
 
-    // Delete cascade: votes → broadcasts → matches
-    let votesDeleted = 0, broadcastsDeleted = 0, matchesDeleted = 0;
+    // Delete cascade: votes → broadcasts → events
+    let votesDeleted = 0, broadcastsDeleted = 0, eventsDeleted = 0;
 
     if (oldBroadcastIds.length > 0) {
       const { count: vCount } = await supabase
@@ -75,16 +75,16 @@ serve(async (req) => {
     const { count: bCount } = await supabase
       .from('broadcasts')
       .delete({ count: 'exact' })
-      .in('match_id', oldMatchIds);
+      .in('event_id', oldMatchIds);
     broadcastsDeleted = bCount || 0;
     console.log(`Deleted ${broadcastsDeleted} broadcasts`);
 
     const { count: mCount } = await supabase
-      .from('matches')
+      .from('events')
       .delete({ count: 'exact' })
       .in('id', oldMatchIds);
-    matchesDeleted = mCount || 0;
-    console.log(`Deleted ${matchesDeleted} matches`);
+    eventsDeleted = mCount || 0;
+    console.log(`Deleted ${eventsDeleted} events`);
 
     // Log cleanup
     await supabase.from('api_fetch_logs').insert({
@@ -94,14 +94,14 @@ serve(async (req) => {
       status: 'success',
       matches_fetched: 0,
       matches_created: 0,
-      matches_updated: -matchesDeleted,
-      error_message: `Cleaned: ${matchesDeleted} matches, ${broadcastsDeleted} broadcasts, ${votesDeleted} votes`
+      matches_updated: -eventsDeleted,
+      error_message: `Cleaned: ${eventsDeleted} events, ${broadcastsDeleted} broadcasts, ${votesDeleted} votes`
     });
 
     return new Response(JSON.stringify({
       success: true,
       deleted: {
-        matches: matchesDeleted,
+        events: eventsDeleted,
         broadcasts: broadcastsDeleted,
         votes: votesDeleted
       }

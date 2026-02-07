@@ -9,10 +9,10 @@ export const FixtureCard = ({ match, user, onVote, onRequestAuth, onAddBroadcast
   const [sortBy, setSortBy] = useState('votes')
   const [sortAsc, setSortAsc] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
-  const col = getSportColors ? getSportColors(match.sport) : { accent: "#00e5ff", bg: "rgba(0,229,255,0.12)", glow: "rgba(0,229,255,0.25)" }
+  const col = getSportColors ? getSportColors(match.sport_name) : { accent: "#00e5ff", bg: "rgba(0,229,255,0.12)", glow: "rgba(0,229,255,0.25)" }
 
-  // Format match time in user's timezone
-  const { time: displayTime, dayLabel, fullDateTime } = formatTime(match.match_date, match.match_time)
+  // Format event time in user's timezone
+  const { time: displayTime, dayLabel, fullDateTime } = formatTime(match.event_date, match.event_time)
 
   // Use DB-driven status (set by livescore edge function, with starting-soon overlay from App.jsx)
   const matchStatus = match.status || 'upcoming'
@@ -24,24 +24,24 @@ export const FixtureCard = ({ match, user, onVote, onRequestAuth, onAddBroadcast
   // Update relative time every minute
   useEffect(() => {
     const updateRelativeTime = () => {
-      setRelativeTime(getRelative(match.match_date, match.match_time))
+      setRelativeTime(getRelative(match.event_date, match.event_time))
     }
 
     updateRelativeTime()
     const timer = setInterval(updateRelativeTime, 60000) // Update every minute
 
     return () => clearInterval(timer)
-  }, [match.match_date, match.match_time, getRelative])
+  }, [match.event_date, match.event_time, getRelative])
 
   // Get icon name based on sport (lowercase)
-  const sportIcon = match.sport ? match.sport.toLowerCase() : ''
+  const sportIcon = match.sport_name ? match.sport_name.toLowerCase() : ''
 
   return (
     <div style={{ background: "#16162a", borderRadius: 10, border: `2px solid ${col.accent}`, overflow: "hidden", boxShadow: isLive ? `0 0 16px ${col.glow}` : "none" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "7px 11px 4px", gap: 8, background: col.bg }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
           <Icon name={sportIcon} size={12} color={col.accent} />
-          <span style={{ fontSize: 10, color: col.accent, fontFamily: "monospace", textTransform: "uppercase", letterSpacing: 0.6, fontWeight: 600 }}>{match.sport}</span>
+          <span style={{ fontSize: 10, color: col.accent, fontFamily: "monospace", textTransform: "uppercase", letterSpacing: 0.6, fontWeight: 600 }}>{match.sport_name}</span>
           <span style={{ color: "#444", fontSize: 10 }}>·</span>
           <span style={{ fontSize: 10, color: "#888", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{match.league}</span>
         </div>
@@ -59,11 +59,19 @@ export const FixtureCard = ({ match, user, onVote, onRequestAuth, onAddBroadcast
           <span style={{ fontSize: 9, fontWeight: 600, color: "#26a69a", background: "rgba(38,166,154,0.15)", padding: "1px 5px", borderRadius: 3, letterSpacing: 1, textTransform: "uppercase", fontFamily: "monospace", flexShrink: 0 }}>UPCOMING</span>
         )}
       </div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", gap: 8 }}>
-        <span style={{ color: "#fff", fontSize: 14, fontWeight: 700, flex: 1, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{match.home}</span>
-        <span style={{ color: "#555", fontSize: 12, fontWeight: 700, fontFamily: "monospace", flexShrink: 0 }}>VS</span>
-        <span style={{ color: "#fff", fontSize: 14, fontWeight: 700, flex: 1, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{match.away}</span>
-      </div>
+      {match.home && match.away ? (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", gap: 8 }}>
+          <span style={{ color: "#fff", fontSize: 14, fontWeight: 700, flex: 1, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{match.home}</span>
+          <span style={{ color: "#555", fontSize: 12, fontWeight: 700, fontFamily: "monospace", flexShrink: 0 }}>VS</span>
+          <span style={{ color: "#fff", fontSize: 14, fontWeight: 700, flex: 1, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{match.away}</span>
+        </div>
+      ) : (
+        <div style={{ padding: "8px 12px" }}>
+          <span style={{ color: "#fff", fontSize: 14, fontWeight: 700 }}>
+            {match.event_name || match.league || 'Event'}
+          </span>
+        </div>
+      )}
       {/* Time display with timezone conversion */}
       <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "2px 12px 8px", flexWrap: "wrap" }}>
         <Icon name="clock" size={10} color="#555" />
@@ -203,11 +211,12 @@ export const FixtureCard = ({ match, user, onVote, onRequestAuth, onAddBroadcast
                 } else if (sortBy === 'channel') {
                   result = (a.channel || '').localeCompare(b.channel || '')
                 } else {
+                  // Ascending = lowest first
                   const aNet = (a.voteStats?.up || 0) - (a.voteStats?.down || 0)
                   const bNet = (b.voteStats?.up || 0) - (b.voteStats?.down || 0)
-                  result = bNet - aNet
+                  result = aNet - bNet
                 }
-                return sortAsc ? -result : result
+                return sortAsc ? result : -result
               }).map(b => (
                 <BroadcastPill
                   key={b.id}

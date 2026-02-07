@@ -15,7 +15,7 @@ import { useReferenceData } from './hooks/useReferenceData'
 
 function App() {
   const { user, loading: authLoading, signInWithGoogle, signOut } = useAuth()
-  const { getSportConfig, getSportColors, getFlag, getCountryNames, getChannelsForCountry, getStatusMap, getConfig, reload: reloadReferenceData } = useReferenceData()
+  const { getSportColors, getFlag, getCountryNames, getChannelsForCountry, getStatusMap, getConfig, reload: reloadReferenceData } = useReferenceData()
   const mapStatus = useMemo(() => createStatusMapper(getStatusMap()), [getStatusMap])
   const { formatTime, getStatus: getUserStatus, getRelative, preferences, loading: prefsLoading } = useUserPreferences(user)
   const [isAdmin, setIsAdmin] = useState(false)
@@ -46,15 +46,15 @@ function App() {
       let from = 0
       while (true) {
         const { data, error } = await supabase
-          .from("matches")
-          .select("*")
-          .gte("match_date", today)
-          .lte("match_date", tomorrow)
-          .order("match_date", { ascending: true })
+          .from("events")
+          .select("*, sport:sports(name)")
+          .gte("event_date", today)
+          .lte("event_date", tomorrow)
+          .order("event_date", { ascending: true })
           .range(from, from + PAGE_SIZE - 1)
 
         if (error) {
-          console.error("Error loading matches:", error)
+          console.error("Error loading events:", error)
           setLoading(false)
           return
         }
@@ -63,6 +63,9 @@ function App() {
         if (!data || data.length < PAGE_SIZE) break
         from += PAGE_SIZE
       }
+
+      // Flatten sport join into sport_name for downstream use
+      matchesData = matchesData.map(m => ({ ...m, sport_name: m.sport?.name || 'Unknown' }))
 
       if (matchesData && matchesData.length > 0) {
         const matchIds = matchesData.map(m => m.id)
@@ -78,7 +81,7 @@ function App() {
             const { data: batchData, error: broadcastsError } = await supabase
               .from("broadcasts")
               .select("*")
-              .in("match_id", batch)
+              .in("event_id", batch)
               .range(batchFrom, batchFrom + PAGE_SIZE - 1)
 
             if (broadcastsError) {
@@ -144,7 +147,7 @@ function App() {
         // Enrich matches with broadcasts and vote stats
         const enriched = matchesData.map(m => {
           const mBroadcasts = (broadcasts || [])
-            .filter(b => b.match_id === m.id)
+            .filter(b => b.event_id === m.id)
             .map(b => ({
               ...b,
               voteStats: votesByBroadcast[b.id] || { up: 0, down: 0, myVote: null }
@@ -153,7 +156,7 @@ function App() {
           // Map raw API status from DB, with client-side "starting-soon" overlay
           let displayStatus = mapStatus(m.status)
           if (displayStatus === 'upcoming') {
-            if (isStartingSoon(m.match_date, m.match_time)) {
+            if (isStartingSoon(m.event_date, m.event_time)) {
               displayStatus = 'starting-soon'
             }
           }
@@ -227,7 +230,7 @@ function App() {
     const { data: blocked } = await supabase
       .from('blocked_broadcasts')
       .select('id')
-      .eq('match_id', matchId)
+      .eq('event_id', matchId)
       .ilike('country', country)
       .ilike('channel', channel)
       .limit(1)
@@ -238,7 +241,7 @@ function App() {
     }
 
     const { data, error } = await supabase.from("broadcasts").insert([{
-      match_id: matchId,
+      event_id: matchId,
       country,
       channel,
       created_by_uuid: user.id,
@@ -421,7 +424,7 @@ function App() {
     const { data: broadcasts } = await supabase
       .from('broadcasts')
       .select('*')
-      .eq('match_id', matchId)
+      .eq('event_id', matchId)
 
     // Fetch votes for these broadcasts
     const broadcastIds = (broadcasts || []).map(b => b.id)
@@ -486,12 +489,13 @@ function App() {
   // The livescore API only reports "NS" before a match, so starting-soon is client-side
   const statusRefreshMs = getConfig('status_refresh_seconds', 60) * 1000
   useEffect(() => {
-    const timer = setInterval(() => {
+    // Re-evaluate immediately when config changes
+    const evaluate = () => {
       setMatches(prev => {
         let changed = false
         const updated = prev.map(m => {
           if (m.status !== 'upcoming' && m.status !== 'starting-soon') return m
-          const startingSoon = isStartingSoon(m.match_date, m.match_time)
+          const startingSoon = isStartingSoon(m.event_date, m.event_time)
           const newStatus = startingSoon ? 'starting-soon' : 'upcoming'
           if (newStatus !== m.status) {
             changed = true
@@ -501,10 +505,12 @@ function App() {
         })
         return changed ? updated : prev
       })
-    }, statusRefreshMs)
+    }
+    evaluate()
+    const timer = setInterval(evaluate, statusRefreshMs)
 
     return () => clearInterval(timer)
-  }, [statusRefreshMs])
+  }, [statusRefreshMs, startingSoonMinutes])
 
   const todayStr = getTodayStr()
   const tomorrowStr = getTomorrowStr()
@@ -513,11 +519,11 @@ function App() {
   // Check if a match is within N minutes of starting (for "starting-soon" overlay)
   // This is client-side only since the livescore API only reports "NS" before kickoff
   const startingSoonMinutes = getConfig('starting_soon_minutes', 15)
-  const isStartingSoon = (matchDate, matchTime) => {
+  const isStartingSoon = (eventDate, eventTime) => {
     try {
-      let timeStr = matchTime.trim()
+      let timeStr = eventTime.trim()
       if (timeStr.split(':').length === 2) timeStr = `${timeStr}:00`
-      const matchDateTime = new Date(`${matchDate}T${timeStr}Z`)
+      const matchDateTime = new Date(`${eventDate}T${timeStr}Z`)
       if (isNaN(matchDateTime.getTime())) return false
       const diffMinutes = (matchDateTime - new Date()) / (1000 * 60)
       return diffMinutes > 0 && diffMinutes <= startingSoonMinutes
@@ -528,14 +534,14 @@ function App() {
 
   const filtered = useMemo(() => {
     let result = matches.filter(m => {
-      if (dateTab === "Today" && m.match_date !== todayStr) return false
-      if (dateTab === "Tomorrow" && m.match_date !== tomorrowStr) return false
+      if (dateTab === "Today" && m.event_date !== todayStr) return false
+      if (dateTab === "Tomorrow" && m.event_date !== tomorrowStr) return false
 
       // Hide finished fixtures from previous days
-      if (m.match_date < todayStr) return false
+      if (m.event_date < todayStr) return false
 
       if (hasActiveFilters) {
-        if (filters.sports?.length > 0 && !filters.sports.includes(m.sport)) return false
+        if (filters.sports?.length > 0 && !filters.sports.includes(m.sport_name)) return false
         if (filters.countries?.length > 0 && !filters.countries.includes(m.country)) return false
         if (filters.events?.length > 0 && !filters.events.includes(m.league)) return false
         if (filters.statuses?.length > 0) {
@@ -544,7 +550,7 @@ function App() {
       }
       if (search) {
         const q = search.toLowerCase()
-        const hit = [m.home, m.away, m.league, m.sport].some(field =>
+        const hit = [m.home, m.away, m.event_name, m.league, m.sport_name].some(field =>
           field?.toLowerCase().includes(q)
         )
         if (!hit) return false
@@ -564,22 +570,22 @@ function App() {
       if (statusDiff !== 0) return statusDiff
 
       // Within same status, sort by time
-      const dateCompare = a.match_date.localeCompare(b.match_date)
+      const dateCompare = a.event_date.localeCompare(b.event_date)
       if (dateCompare !== 0) return dateCompare
 
-      // For live and finished matches, show most recent first (descending - recently started/finished)
+      // For live and finished events, show most recent first (descending - recently started/finished)
       // For starting-soon and upcoming, show earliest first (ascending - soonest first)
       if (aStatus === 'live' || aStatus === 'finished') {
-        return b.match_time.localeCompare(a.match_time)
+        return b.event_time.localeCompare(a.event_time)
       }
-      return a.match_time.localeCompare(b.match_time)
+      return a.event_time.localeCompare(b.event_time)
     })
 
     return result
   }, [matches, dateTab, search, filters, hasActiveFilters, todayStr, tomorrowStr])
 
   const allSports = useMemo(() =>
-    [...new Set(matches.map(m => m.sport))].sort(), [matches]
+    [...new Set(matches.map(m => m.sport_name))].sort(), [matches]
   )
 
   // Calculate live count from DB status
@@ -611,7 +617,7 @@ function App() {
     const { data } = await supabase
       .from('blocked_broadcasts')
       .select('country, channel')
-      .eq('match_id', match.id)
+      .eq('event_id', match.id)
     setBlockedBroadcasts(data || [])
     setShowAddBroadcast(true)
   }
@@ -803,22 +809,28 @@ function App() {
 
             {/* Load More Button */}
             {hasMoreMatches && (
-              <div style={{ marginTop: 16, textAlign: "center" }}>
+              <div style={{ marginTop: 16 }}>
                 <button
                   onClick={loadMore}
                   style={{
-                    padding: "10px 24px",
-                    borderRadius: 8,
-                    border: "1px solid rgba(0,229,255,0.3)",
-                    background: "rgba(0,229,255,0.1)",
-                    color: "#00e5ff",
-                    fontSize: 13,
+                    width: "100%",
+                    padding: "12px 0",
+                    borderRadius: 10,
+                    border: "none",
+                    background: "linear-gradient(135deg, rgba(0,229,255,0.12), rgba(124,77,255,0.12))",
+                    color: "#aaa",
+                    fontSize: 12,
                     fontWeight: 600,
                     cursor: "pointer",
-                    fontFamily: "monospace"
+                    fontFamily: "monospace",
+                    letterSpacing: 0.5,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 6
                   }}
                 >
-                  + Load More ({filtered.length - displayLimit} remaining)
+                  <span style={{ color: "#00e5ff" }}>+</span> Load More <span style={{ color: "#555" }}>({filtered.length - displayLimit} remaining)</span>
                 </button>
               </div>
             )}

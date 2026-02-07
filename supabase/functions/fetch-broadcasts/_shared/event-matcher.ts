@@ -8,12 +8,12 @@ import { TheSportsDBSportConfig } from './thesportsdb-config.ts';
 
 export interface DatabaseMatch {
   id: string;
-  sport: string;
+  sport_id: number;
   league: string;
   home: string;
   away: string;
-  match_date: string;
-  match_time: string;
+  event_date: string;
+  event_time: string;
 }
 
 export interface MatchDetails {
@@ -85,8 +85,8 @@ export class EventMatcher {
       config.teamNameNormalizations
     );
 
-    const dateScore = this.compareDates(event.dateEvent, match.match_date);
-    const timeScore = this.compareTimes(event.strTime, match.match_time);
+    const dateScore = this.compareDates(event.dateEvent, match.event_date);
+    const timeScore = this.compareTimes(event.strTime, match.event_time);
     const leagueScore = this.compareLeagues(
       event.strLeague,
       match.league,

@@ -24,6 +24,8 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
   const [importing, setImporting] = useState(false)
   const [fetchingFixtures, setFetchingFixtures] = useState(false)
   const [fetchingBroadcasts, setFetchingBroadcasts] = useState(false)
+  const [fetchingLivescores, setFetchingLivescores] = useState(false)
+  const [livescoreResult, setLivescoreResult] = useState(null)
   const [selectedDates, setSelectedDates] = useState(['today', 'tomorrow'])
   const [logs, setLogs] = useState([])
   const [loadingLogs, setLoadingLogs] = useState(false)
@@ -47,7 +49,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
   const [banAction, setBanAction] = useState("ban") // "ban" or "unban"
   const [searchUser, setSearchUser] = useState("")
   const [logTypeFilter, setLogTypeFilter] = useState("all")
-  const [importType, setImportType] = useState(null) // 'fixtures', 'broadcasts', 'legacy', or null
+  const [importType, setImportType] = useState(null) // 'fixtures', 'broadcasts', 'livescores', or null (user-selected)
   const [importPreview, setImportPreview] = useState(null)
   const [cleaningUp, setCleaningUp] = useState(false)
   const [cleanupResult, setCleanupResult] = useState(null)
@@ -83,14 +85,12 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
     setShowScrollHint(el.scrollHeight - el.scrollTop - el.clientHeight > 10)
   }, [])
 
-  // Detect and preview import data
-  const detectImportType = (jsonString) => {
+  // Preview import data based on user-selected type
+  const previewImportData = (jsonString, type) => {
     try {
       const parsed = JSON.parse(jsonString)
 
-      // TheSportsDB fixtures format
-      if (parsed.events && Array.isArray(parsed.events)) {
-        setImportType('fixtures')
+      if (type === 'fixtures' && parsed.events && Array.isArray(parsed.events)) {
         setImportPreview({
           count: parsed.events.length,
           sample: parsed.events.slice(0, 3).map(e => ({
@@ -102,9 +102,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
         return
       }
 
-      // TheSportsDB TV broadcasts format
-      if (parsed.tvevents && Array.isArray(parsed.tvevents)) {
-        setImportType('broadcasts')
+      if (type === 'broadcasts' && parsed.tvevents && Array.isArray(parsed.tvevents)) {
         setImportPreview({
           count: parsed.tvevents.length,
           sample: parsed.tvevents.slice(0, 3).map(e => ({
@@ -116,24 +114,20 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
         return
       }
 
-      // Legacy array format
-      if (Array.isArray(parsed)) {
-        setImportType('legacy')
+      if (type === 'livescores' && parsed.events && Array.isArray(parsed.events)) {
         setImportPreview({
-          count: parsed.length,
-          sample: parsed.slice(0, 3).map(m => ({
-            teams: `${m.home} vs ${m.away}`,
-            sport: m.sport,
-            date: m.date
+          count: parsed.events.length,
+          sample: parsed.events.slice(0, 3).map(e => ({
+            event: e.strEvent,
+            status: e.strStatus || e.strProgress,
+            score: `${e.intHomeScore ?? '?'} - ${e.intAwayScore ?? '?'}`
           }))
         })
         return
       }
 
-      setImportType(null)
       setImportPreview(null)
     } catch {
-      setImportType(null)
       setImportPreview(null)
     }
   }
@@ -151,7 +145,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
         target_user_uuid: details.targetUserUuid,
         target_user_email: details.targetUserEmail,
         broadcast_id: details.broadcastId,
-        match_id: details.matchId,
+        event_id: details.matchId,
         details: details.extraData || {}
       }])
     } catch (e) {
@@ -161,6 +155,10 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
   }
 
   const handleImport = async () => {
+    if (!importType) {
+      setError("Please select an import type first.")
+      return
+    }
     setImporting(true)
     setError("")
     setSuccess("")
@@ -168,34 +166,56 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
     try {
       const parsed = JSON.parse(jsonData)
 
-      // TheSportsDB fixtures format
-      if (parsed.events && Array.isArray(parsed.events)) {
+      // Fixtures import
+      if (importType === 'fixtures') {
+        if (!parsed.events || !Array.isArray(parsed.events)) {
+          setError('Expected { "events": [...] } format for events import.')
+          setImporting(false)
+          return
+        }
         const events = parsed.events
-        const matches = events.map(e => ({
-          id: `sportsdb-${e.idEvent}`,
-          sportsdb_event_id: e.idEvent,
-          sport: e.strSport || 'Unknown',
-          league: e.strLeague || 'Unknown League',
-          home: e.strHomeTeam || 'TBD',
-          away: e.strAwayTeam || 'TBD',
-          match_date: e.dateEvent,
-          match_time: e.strTime?.substring(0, 5) || '00:00',
-          country: e.strCountry || 'Global',
-          status: 'upcoming',
-          popularity: 70
-        }))
+
+        // Ensure sports exist and build name→id map
+        const uniqueSports = [...new Set(events.map(e => e.strSport).filter(Boolean))]
+        if (uniqueSports.length > 0) {
+          await supabase.from('sports').upsert(
+            uniqueSports.map(name => ({ name })),
+            { onConflict: 'name', ignoreDuplicates: true }
+          )
+        }
+        const { data: sportsData } = await supabase.from('sports').select('id, name')
+        const sportMap = Object.fromEntries((sportsData || []).map(s => [s.name, s.id]))
+
+        const rows = events.map(e => {
+          const sportId = sportMap[e.strSport]
+          if (!sportId) return null
+          return {
+            id: `sportsdb-${e.idEvent}`,
+            sportsdb_event_id: e.idEvent,
+            sport_id: sportId,
+            league: e.strLeague || 'Unknown League',
+            home: e.strHomeTeam || null,
+            away: e.strAwayTeam || null,
+            event_name: (!e.strHomeTeam || !e.strAwayTeam) ? (e.strEvent || null) : null,
+            event_date: e.dateEvent,
+            event_time: e.strTime?.substring(0, 5) || '00:00',
+            country: e.strCountry || 'Global',
+            status: 'upcoming',
+            popularity: 70
+          }
+        }).filter(Boolean)
 
         const { error: dbError } = await supabase
-          .from("matches")
-          .upsert(matches, { onConflict: 'sportsdb_event_id' })
+          .from("events")
+          .upsert(rows, { onConflict: 'sportsdb_event_id' })
 
         if (dbError) {
           setError("Database error: " + dbError.message)
         } else {
-          const sports = [...new Set(matches.map(m => m.sport))]
-          setSuccess(`Imported ${matches.length} fixtures across ${sports.length} sport(s)!`)
+          const sports = uniqueSports
+          setSuccess(`Imported ${rows.length} events across ${sports.length} sport(s)!`)
           await logAdminAction('fixtures_imported', {
-            extraData: { count: matches.length, sports, source: 'thesportsdb_json' }
+            extraData: { count: rows.length, sports, source: 'thesportsdb_json' }
           })
           setTimeout(() => { onUpdate() }, 1500)
         }
@@ -203,8 +223,13 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
         return
       }
 
-      // TheSportsDB TV broadcasts format
-      if (parsed.tvevents && Array.isArray(parsed.tvevents)) {
+      // Broadcasts import
+      if (importType === 'broadcasts') {
+        if (!parsed.tvevents || !Array.isArray(parsed.tvevents)) {
+          setError('Expected { "tvevents": [...] } format for broadcasts import.')
+          setImporting(false)
+          return
+        }
         const tvevents = parsed.tvevents
         let matched = 0
         let unmatched = 0
@@ -218,9 +243,8 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
             continue
           }
 
-          // Find the match by sportsdb_event_id
           const { data: match } = await supabase
-            .from('matches')
+            .from('events')
             .select('id')
             .eq('sportsdb_event_id', tv.idEvent)
             .single()
@@ -232,16 +256,14 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
 
           matched++
 
-          // Parse TV stations (may be comma-separated)
           const stations = (tv.strTVStation || tv.strChannel || '').split(',').map(s => s.trim()).filter(Boolean)
           const country = tv.strCountry || 'Global'
 
           for (const channel of stations) {
-            // Check if broadcast already exists
             const { data: existingList } = await supabase
               .from('broadcasts')
               .select('id')
-              .eq('match_id', match.id)
+              .eq('event_id', match.id)
               .eq('channel', channel)
               .eq('country', country)
               .limit(1)
@@ -251,11 +273,10 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
               continue
             }
 
-            // Insert new broadcast
             const { error: insertError } = await supabase
               .from('broadcasts')
               .insert({
-                match_id: match.id,
+                event_id: match.id,
                 channel,
                 country,
                 source: 'thesportsdb',
@@ -273,14 +294,14 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
         }
 
         if (matched === 0 && unmatched > 0) {
-          setError(`No matching fixtures found for ${unmatched} TV events. Import fixtures first.`)
+          setError(`No matching events found for ${unmatched} TV events. Import events first.`)
         } else if (errors.length > 0) {
           setError(`Errors: ${errors.slice(0, 3).join(', ')}${errors.length > 3 ? ` (+${errors.length - 3} more)` : ''}`)
         } else if (inserted === 0 && skipped === 0 && matched > 0) {
-          setError(`Matched ${matched} fixtures but found no TV stations in data. Check strTVStation field.`)
+          setError(`Matched ${matched} events but found no TV stations in data. Check strTVStation field.`)
         } else {
           const skipMsg = skipped > 0 ? `, ${skipped} skipped (duplicates)` : ''
-          setSuccess(`Linked ${inserted} broadcasts to ${matched} fixtures${skipMsg}`)
+          setSuccess(`Linked ${inserted} broadcasts to ${matched} events${skipMsg}`)
           await logAdminAction('broadcasts_imported', {
             extraData: { matched, unmatched, inserted, skipped, source: 'thesportsdb_json' }
           })
@@ -290,33 +311,61 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
         return
       }
 
-      // Legacy array format
-      if (Array.isArray(parsed)) {
-        const matches = parsed.map(m => ({
-          id: m.id,
-          sport: m.sport,
-          league: m.league,
-          home: m.home,
-          away: m.away,
-          match_date: m.date,
-          match_time: m.time,
-          country: m.country,
-          status: m.status || "upcoming",
-          popularity: m.popularity || 70
-        }))
+      // Livescores import
+      if (importType === 'livescores') {
+        if (!parsed.events || !Array.isArray(parsed.events)) {
+          setError('Expected { "events": [...] } format for livescores import.')
+          setImporting(false)
+          return
+        }
+        const events = parsed.events
+        let updated = 0
+        let notFound = 0
+        const errors = []
 
-        const { error: dbError } = await supabase.from("matches").upsert(matches)
-        if (dbError) {
-          setError("Database error: " + dbError.message)
+        for (const event of events) {
+          if (!event.idEvent) continue
+
+          const status = event.strStatus || event.strProgress || 'NS'
+          const homeScore = event.intHomeScore !== null && event.intHomeScore !== '' ? parseInt(event.intHomeScore, 10) : null
+          const awayScore = event.intAwayScore !== null && event.intAwayScore !== '' ? parseInt(event.intAwayScore, 10) : null
+
+          const { data, error: updateError } = await supabase
+            .from('events')
+            .update({
+              status,
+              home_score: isNaN(homeScore) ? null : homeScore,
+              away_score: isNaN(awayScore) ? null : awayScore,
+              last_live_update: new Date().toISOString()
+            })
+            .eq('sportsdb_event_id', event.idEvent)
+            .select('id')
+
+          if (updateError) {
+            errors.push(`${event.idEvent}: ${updateError.message}`)
+          } else if (!data || data.length === 0) {
+            notFound++
+          } else {
+            updated++
+          }
+        }
+
+        if (errors.length > 0) {
+          setError(`${errors.length} error(s): ${errors.slice(0, 3).join('; ')}`)
+        } else if (updated === 0 && notFound > 0) {
+          setError(`No matching events found for ${notFound} events. Import events first.`)
         } else {
-          setSuccess(`Successfully imported ${matches.length} matches!`)
+          setSuccess(`Updated ${updated} match score(s)${notFound > 0 ? `, ${notFound} not found` : ''}`)
+          await logAdminAction('livescores_imported', {
+            extraData: { updated, notFound, source: 'thesportsdb_json' }
+          })
           setTimeout(() => { onUpdate() }, 1500)
         }
         setImporting(false)
         return
       }
 
-      setError("Unrecognized format. Expected TheSportsDB events/tvevents or array of matches.")
+      setError("Please select an import type.")
     } catch (e) {
       setError("Error: " + e.message)
     }
@@ -334,7 +383,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
       const token = session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 
-      const response = await fetch(`${supabaseUrl}/functions/v1/fetch-all-sports`, {
+      const response = await fetch(`${supabaseUrl}/functions/v1/fetch-events`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -438,6 +487,41 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
     setCleaningUp(false)
   }
 
+  const handleFetchLivescores = async () => {
+    setFetchingLivescores(true)
+    setError("")
+    setSuccess("")
+    setLivescoreResult(null)
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/fetch-livestatus`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ trigger: 'manual' })
+      })
+
+      const result = await response.json()
+      setLivescoreResult(result)
+
+      if (result.success) {
+        setSuccess(`Livescores: ${result.updated} updated, ${result.disappearedFinished || 0} finished`)
+        setTimeout(() => { onUpdate() }, 1000)
+      } else {
+        setError('Livescore fetch failed: ' + (result.error || 'Unknown error'))
+      }
+    } catch (e) {
+      setError('Error: ' + e.message)
+    }
+    setFetchingLivescores(false)
+  }
+
   const loadLogs = async () => {
     setLoadingLogs(true)
     try {
@@ -450,24 +534,26 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
           .order('created_at', { ascending: false })
           .limit(50)
 
-        if (error) throw error
-
-        const apiLogs = (data || []).map(log => ({
-          id: log.id,
-          type: 'api_fetch',
-          action_type: log.fetch_type,
-          status: log.status,
-          created_at: log.created_at,
-          details: {
-            sport: log.sport,
-            fetch_date: log.fetch_date,
-            matches_fetched: log.matches_fetched,
-            matches_updated: log.matches_updated,
-            api_response_time_ms: log.api_response_time_ms,
-            error_message: log.error_message
-          }
-        }))
-        allLogs = [...allLogs, ...apiLogs]
+        if (error) {
+          console.error('Error loading api_fetch_logs:', error)
+        } else if (data) {
+          const apiLogs = data.map(log => ({
+            id: log.id,
+            type: 'api_fetch',
+            action_type: log.fetch_type,
+            status: log.status,
+            created_at: log.created_at,
+            details: {
+              sport: log.sport,
+              fetch_date: log.fetch_date,
+              matches_fetched: log.matches_fetched,
+              matches_updated: log.matches_updated,
+              api_response_time_ms: log.api_response_time_ms,
+              error_message: log.error_message
+            }
+          }))
+          allLogs = [...allLogs, ...apiLogs]
+        }
       }
 
       if (logTypeFilter === "all" || logTypeFilter === "admin_actions") {
@@ -503,25 +589,36 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
   const loadFixtures = async () => {
     setLoadingFixtures(true)
     try {
-      // Fetch fixtures with their broadcasts
-      const { data, error } = await supabase
-        .from('matches')
-        .select(`
-          *,
-          broadcasts (
-            id,
-            channel,
-            country,
-            source,
-            created_by,
-            created_at
-          )
-        `)
-        .order('match_date', { ascending: false })
-        .limit(500)
+      // Fetch all fixtures with their broadcasts using pagination
+      let allFixtures = []
+      const PAGE_SIZE = 1000
+      let from = 0
+      while (true) {
+        const { data, error } = await supabase
+          .from('events')
+          .select(`
+            *,
+            sport:sports(name),
+            broadcasts (
+              id,
+              channel,
+              country,
+              source,
+              created_by,
+              created_at
+            )
+          `)
+          .order('event_date', { ascending: false })
+          .range(from, from + PAGE_SIZE - 1)
 
-      if (error) throw error
-      setFixtures(data || [])
+        if (error) throw error
+        // Flatten sport join into sport_name for downstream use
+        const flattened = (data || []).map(f => ({ ...f, sport_name: f.sport?.name || 'Unknown' }))
+        allFixtures = allFixtures.concat(flattened)
+        if (!data || data.length < PAGE_SIZE) break
+        from += PAGE_SIZE
+      }
+      setFixtures(allFixtures)
     } catch (e) {
       console.error('Error loading fixtures:', e)
     }
@@ -561,7 +658,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
     try {
       // Delete fixtures - broadcasts and votes will cascade delete
       const { error } = await supabase
-        .from('matches')
+        .from('events')
         .delete()
         .in('id', selectedFixtures)
 
@@ -575,13 +672,13 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
         }
       })
 
-      setSuccess(`Successfully deleted ${selectedFixtures.length} fixture${selectedFixtures.length > 1 ? 's' : ''} (and associated broadcasts/votes)`)
+      setSuccess(`Successfully deleted ${selectedFixtures.length} event${selectedFixtures.length > 1 ? 's' : ''} (and associated broadcasts/votes)`)
       setSelectedFixtures([])
       await loadFixtures()
       onUpdate()
       setTimeout(() => setSuccess(""), 3000)
     } catch (e) {
-      setError('Error deleting fixtures: ' + e.message)
+      setError('Error deleting events: ' + e.message)
       setTimeout(() => setError(""), 3000)
     }
     setDeletingFixtures(false)
@@ -591,16 +688,16 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
   const getFilteredFixtures = () => {
     return fixtures.filter(fixture => {
       // Sport filter
-      if (sportFilter !== "all" && fixture.sport !== sportFilter) {
+      if (sportFilter !== "all" && fixture.sport_name !== sportFilter) {
         return false
       }
 
       // Search filter
       if (searchFixture) {
         const searchTerm = searchFixture.toLowerCase()
-        const teams = `${fixture.home} ${fixture.away}`.toLowerCase()
+        const teams = `${fixture.home || ''} ${fixture.away || ''} ${fixture.event_name || ''}`.toLowerCase()
         const league = (fixture.league || '').toLowerCase()
-        const sport = (fixture.sport || '').toLowerCase()
+        const sport = (fixture.sport_name || '').toLowerCase()
 
         if (!teams.includes(searchTerm) && !league.includes(searchTerm) && !sport.includes(searchTerm)) {
           return false
@@ -612,7 +709,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
   }
 
   const getUniqueSports = () => {
-    return [...new Set(fixtures.map(f => f.sport))].sort()
+    return [...new Set(fixtures.map(f => f.sport_name))].sort()
   }
 
   const loadUsers = async () => {
@@ -832,20 +929,17 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
 
   const getFilteredUsers = () => {
     return users.filter(user => {
-      // Filter out users with unknown email (no broadcasts)
-      if (!user.email || user.email === 'Unknown') {
-        return false
-      }
-
       // Filter out current admin
       if (currentUserEmail && user.email === currentUserEmail) {
         return false
       }
 
-      // Search filter
+      // Search filter (search email and display name)
       if (searchUser) {
-        const email = user.email || ''
-        if (!email.toLowerCase().includes(searchUser.toLowerCase())) {
+        const email = (user.email || '').toLowerCase()
+        const name = (user.displayName || '').toLowerCase()
+        const query = searchUser.toLowerCase()
+        if (!email.includes(query) && !name.includes(query)) {
           return false
         }
       }
@@ -921,7 +1015,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
       const [countriesRes, channelsRes, blockedRes] = await Promise.all([
         supabase.from('countries').select('*').order('name'),
         supabase.from('country_channels').select('*, countries(name)').order('channel_name'),
-        supabase.from('blocked_broadcasts').select('*, matches(home, away, league, match_date)').order('blocked_at', { ascending: false })
+        supabase.from('blocked_broadcasts').select('*, events(home, away, event_name, league, event_date)').order('blocked_at', { ascending: false })
       ])
       setCountries(countriesRes.data || [])
       setChannels(channelsRes.data || [])
@@ -998,9 +1092,9 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
 
   // --- Config tab functions ---
   const CRON_JOB_MAP = {
-    'cron_fetch_sports': 'fetch-all-sports-hourly',
+    'cron_fetch_events': 'fetch-events-hourly',
     'cron_fetch_broadcasts': 'fetch-broadcasts-every-15-min',
-    'cron_fetch_livescores': 'fetch-livescores-every-2-min',
+    'cron_fetch_livestatus': 'fetch-livestatus-every-2-min',
     'cron_cleanup': 'cleanup-old-data-daily'
   }
 
@@ -1124,8 +1218,8 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
           {[
             { id: 'import', label: 'Import' },
             { id: 'fetch', label: 'Manage' },
-            { id: 'fixtures', label: 'Fixtures' },
-            { id: 'status', label: 'Status' },
+            { id: 'fixtures', label: 'Events' },
+            { id: 'status', label: 'Statuses' },
             { id: 'channels', label: 'Channels' },
             { id: 'config', label: 'Config' },
             { id: 'users', label: 'Users' },
@@ -1163,148 +1257,136 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
         <div ref={scrollRef} onScroll={checkScroll} className="hidden-scrollbar" style={{ height: "100%", overflowY: "auto", overflowX: "hidden" }}>
           {activeTab === 'import' && (
             <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-              <div style={{ fontSize: 11, color: "#888", marginBottom: 12, lineHeight: 1.5 }}>
-                Paste JSON from TheSportsDB API responses. Supports:<br />
-                • <span style={{ color: "#00e5ff" }}>{"{ events: [...] }"}</span> - Fixtures from eventsday.php<br />
-                • <span style={{ color: "#ff9f1c" }}>{"{ tvevents: [...] }"}</span> - Broadcasts from eventstv.php
+              <div style={{ fontSize: 11, color: "#888", marginBottom: 12 }}>
+                Select import type, then paste the JSON data.
               </div>
-              <textarea
-                value={jsonData}
-                onChange={(e) => {
-                  setJsonData(e.target.value)
-                  setError("")
-                  setSuccess("")
-                  detectImportType(e.target.value)
-                }}
-                placeholder='Paste TheSportsDB JSON response here...
 
-Example fixtures:
-{ "events": [{ "idEvent": "123", "strSport": "Soccer", ... }] }
+              {/* Import type selector */}
+              <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+                {[
+                  { key: 'fixtures', label: 'Events', color: '#00e5ff', icon: 'calendar', desc: '{ events: [...] }' },
+                  { key: 'broadcasts', label: 'Broadcasts', color: '#ff9f1c', icon: 'tv', desc: '{ tvevents: [...] }' },
+                  { key: 'livescores', label: 'Livescores', color: '#4caf50', icon: 'clock', desc: '{ events: [...] }' },
+                ].map(opt => {
+                  const active = importType === opt.key
+                  return (
+                    <button
+                      key={opt.key}
+                      onClick={() => {
+                        setImportType(active ? null : opt.key)
+                        setImportPreview(null)
+                        setError("")
+                        setSuccess("")
+                        if (!active && jsonData.trim()) {
+                          previewImportData(jsonData, opt.key)
+                        }
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: "8px 4px",
+                        borderRadius: 8,
+                        border: active ? `1px solid ${opt.color}80` : "1px solid #2a2a4a",
+                        background: active ? `${opt.color}20` : "rgba(255,255,255,0.04)",
+                        color: active ? opt.color : "#666",
+                        fontSize: 11,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        gap: 3,
+                      }}
+                    >
+                      <Icon name={opt.icon} size={14} color={active ? opt.color : "#555"} />
+                      {opt.label}
+                    </button>
+                  )
+                })}
+              </div>
 
-Example broadcasts:
-{ "tvevents": [{ "idEvent": "123", "strTVStation": "ESPN", ... }] }'
-                style={{
-                  flex: 1,
-                  padding: 12,
-                  borderRadius: 8,
-                  border: "1px solid #2a2a4a",
-                  background: "#111122",
-                  color: "#fff",
-                  fontSize: 11,
-                  fontFamily: "monospace",
-                  outline: "none",
-                  resize: "none",
-                  marginBottom: 12,
-                  minHeight: 160
-                }}
-              />
-
-              {/* Format detection preview */}
-              {importType && importPreview && (
-                <div style={{
-                  padding: 10,
-                  marginBottom: 12,
-                  background: importType === 'fixtures' ? "rgba(0,229,255,0.08)" : importType === 'broadcasts' ? "rgba(255,159,28,0.08)" : "rgba(255,255,255,0.04)",
-                  border: `1px solid ${importType === 'fixtures' ? "rgba(0,229,255,0.3)" : importType === 'broadcasts' ? "rgba(255,159,28,0.3)" : "#2a2a4a"}`,
-                  borderRadius: 8
-                }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                    <Icon name={importType === 'fixtures' ? 'calendar' : importType === 'broadcasts' ? 'tv' : 'list'} size={12} color={importType === 'fixtures' ? '#00e5ff' : importType === 'broadcasts' ? '#ff9f1c' : '#aaa'} />
-                    <span style={{
+              {importType && (
+                <>
+                  <div style={{ fontSize: 10, color: "#555", marginBottom: 8, fontFamily: "monospace" }}>
+                    Expected format: {importType === 'broadcasts' ? '{ "tvevents": [...] }' : '{ "events": [...] }'}
+                  </div>
+                  <textarea
+                    value={jsonData}
+                    onChange={(e) => {
+                      setJsonData(e.target.value)
+                      setError("")
+                      setSuccess("")
+                      previewImportData(e.target.value, importType)
+                    }}
+                    placeholder={
+                      importType === 'fixtures' ? 'Paste TheSportsDB eventsday.php response...\n\n{ "events": [{ "idEvent": "123", "strSport": "Soccer", ... }] }' :
+                      importType === 'broadcasts' ? 'Paste TheSportsDB eventstv.php response...\n\n{ "tvevents": [{ "idEvent": "123", "strTVStation": "ESPN", ... }] }' :
+                      'Paste TheSportsDB livescores response...\n\n{ "events": [{ "idEvent": "123", "strStatus": "1H", "intHomeScore": "1", ... }] }'
+                    }
+                    style={{
+                      flex: 1,
+                      padding: 12,
+                      borderRadius: 8,
+                      border: "1px solid #2a2a4a",
+                      background: "#111122",
+                      color: "#fff",
                       fontSize: 11,
-                      fontWeight: 600,
-                      color: importType === 'fixtures' ? '#00e5ff' : importType === 'broadcasts' ? '#ff9f1c' : '#aaa',
-                      textTransform: 'uppercase'
+                      fontFamily: "monospace",
+                      outline: "none",
+                      resize: "none",
+                      marginBottom: 12,
+                      minHeight: 160
+                    }}
+                  />
+
+                  {/* Data preview */}
+                  {importPreview && (
+                    <div style={{
+                      padding: 10,
+                      marginBottom: 12,
+                      background: importType === 'fixtures' ? "rgba(0,229,255,0.08)" : importType === 'broadcasts' ? "rgba(255,159,28,0.08)" : importType === 'livescores' ? "rgba(76,175,80,0.08)" : "rgba(255,255,255,0.04)",
+                      border: `1px solid ${importType === 'fixtures' ? "rgba(0,229,255,0.3)" : importType === 'broadcasts' ? "rgba(255,159,28,0.3)" : importType === 'livescores' ? "rgba(76,175,80,0.3)" : "#2a2a4a"}`,
+                      borderRadius: 8
                     }}>
-                      {importType === 'fixtures' ? 'TheSportsDB Fixtures' : importType === 'broadcasts' ? 'TheSportsDB Broadcasts' : 'Legacy Format'}
-                    </span>
-                    <span style={{ fontSize: 10, color: "#666" }}>
-                      ({importPreview.count} items)
-                    </span>
-                  </div>
-                  <div style={{ fontSize: 10, color: "#888", lineHeight: 1.5, fontFamily: "monospace" }}>
-                    {importPreview.sample.map((item, i) => (
-                      <div key={i} style={{ marginBottom: 2 }}>
-                        {importType === 'fixtures' && `• ${item.sport}: ${item.event} (${item.date})`}
-                        {importType === 'broadcasts' && `• ${item.event} → ${item.channel} (${item.country})`}
-                        {importType === 'legacy' && `• ${item.sport}: ${item.teams} (${item.date})`}
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                        <span style={{ fontSize: 10, color: "#666" }}>
+                          {importPreview.count} items detected
+                        </span>
                       </div>
-                    ))}
-                    {importPreview.count > 3 && <div style={{ color: "#555" }}>...and {importPreview.count - 3} more</div>}
-                  </div>
-                  {importType === 'broadcasts' && (
-                    <div style={{ fontSize: 9, color: "#ff9f1c", marginTop: 6, fontStyle: "italic" }}>
-                      Note: Broadcasts will be linked to fixtures by event ID. Import fixtures first if needed.
+                      <div style={{ fontSize: 10, color: "#888", lineHeight: 1.5, fontFamily: "monospace" }}>
+                        {importPreview.sample.map((item, i) => (
+                          <div key={i} style={{ marginBottom: 2 }}>
+                            {importType === 'fixtures' && `• ${item.sport}: ${item.event} (${item.date})`}
+                            {importType === 'broadcasts' && `• ${item.event} → ${item.channel} (${item.country})`}
+                            {importType === 'livescores' && `• ${item.event} [${item.status}] ${item.score}`}
+                          </div>
+                        ))}
+                        {importPreview.count > 3 && <div style={{ color: "#555" }}>...and {importPreview.count - 3} more</div>}
+                      </div>
+                      {importType === 'broadcasts' && (
+                        <div style={{ fontSize: 9, color: "#ff9f1c", marginTop: 6, fontStyle: "italic" }}>
+                          Note: Broadcasts will be linked to events by event ID. Import events first if needed.
+                        </div>
+                      )}
+                      {importType === 'livescores' && (
+                        <div style={{ fontSize: 9, color: "#4caf50", marginTop: 6, fontStyle: "italic" }}>
+                          This will update match statuses and scores for existing events.
+                        </div>
+                      )}
                     </div>
                   )}
-                </div>
-              )}
 
-              {error && <div style={{ padding: 8, marginBottom: 12, background: "rgba(244,67,54,0.15)", border: "1px solid rgba(244,67,54,0.3)", borderRadius: 6, color: "#e57373", fontSize: 11 }}>{error}</div>}
-              {success && <div style={{ padding: 8, marginBottom: 12, background: "rgba(76,175,80,0.15)", border: "1px solid rgba(76,175,80,0.3)", borderRadius: 6, color: "#81c784", fontSize: 11 }}>{success}</div>}
-              <button onClick={handleImport} disabled={!jsonData.trim() || importing} style={{ width: "100%", padding: "10px 0", borderRadius: 8, border: "none", background: jsonData.trim() && !importing ? "linear-gradient(135deg,#00e5ff,#7c4dff)" : "#2a2a4a", color: "#fff", fontSize: 14, fontWeight: 600, cursor: jsonData.trim() && !importing ? "pointer" : "not-allowed" }}>
-                {importing ? "Importing..." : importType === 'fixtures' ? 'Import Fixtures' : importType === 'broadcasts' ? 'Import Broadcasts' : 'Import'}
-              </button>
+                  {error && <div style={{ padding: 8, marginBottom: 12, background: "rgba(244,67,54,0.15)", border: "1px solid rgba(244,67,54,0.3)", borderRadius: 6, color: "#e57373", fontSize: 11 }}>{error}</div>}
+                  {success && <div style={{ padding: 8, marginBottom: 12, background: "rgba(76,175,80,0.15)", border: "1px solid rgba(76,175,80,0.3)", borderRadius: 6, color: "#81c784", fontSize: 11 }}>{success}</div>}
+                  <button onClick={handleImport} disabled={!jsonData.trim() || importing} style={{ width: "100%", padding: "10px 0", borderRadius: 8, border: "none", background: jsonData.trim() && !importing ? "linear-gradient(135deg,#00e5ff,#7c4dff)" : "#2a2a4a", color: "#fff", fontSize: 14, fontWeight: 600, cursor: jsonData.trim() && !importing ? "pointer" : "not-allowed" }}>
+                    {importing ? "Importing..." : importType === 'fixtures' ? 'Import Events' : importType === 'broadcasts' ? 'Import Broadcasts' : importType === 'livescores' ? 'Import Livescores' : 'Import'}
+                  </button>
+                </>
+              )}
             </div>
           )}
 
           {activeTab === 'fetch' && (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              {/* Combined results area */}
-              {(fetchResult || broadcastResult || (cleanupResult && cleanupResult.success && cleanupResult.deleted?.matches > 0)) && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {fetchResult && (
-                    <div style={{
-                      padding: 10,
-                      background: getStatusBg(fetchResult.status),
-                      border: `1px solid ${getStatusBorder(fetchResult.status)}`,
-                      borderRadius: 6,
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                    }}>
-                      <Icon name="calendar" size={12} color="#00e5ff" />
-                      <div style={{ fontSize: 11, color: "#aaa", lineHeight: 1.4 }}>
-                        Found {fetchResult.eventsFound} events across {fetchResult.sportsFound} sports, inserted {fetchResult.eventsInserted}
-                      </div>
-                    </div>
-                  )}
-                  {broadcastResult && (
-                    <div style={{
-                      padding: 10,
-                      background: getStatusBg(broadcastResult.status),
-                      border: `1px solid ${getStatusBorder(broadcastResult.status)}`,
-                      borderRadius: 6,
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                    }}>
-                      <Icon name="tv" size={12} color="#ff9f1c" />
-                      <div style={{ fontSize: 11, color: "#aaa", lineHeight: 1.4 }}>
-                        Found {broadcastResult.tvEventsFound} TV events, matched {broadcastResult.matched}, inserted {broadcastResult.broadcastsInserted} broadcasts
-                        {broadcastResult.unmatched > 0 && `, ${broadcastResult.unmatched} unmatched`}
-                      </div>
-                    </div>
-                  )}
-                  {cleanupResult && cleanupResult.success && cleanupResult.deleted?.matches > 0 && (
-                    <div style={{
-                      padding: 10,
-                      background: "rgba(76,175,80,0.15)",
-                      border: "1px solid rgba(76,175,80,0.3)",
-                      borderRadius: 6,
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                    }}>
-                      <Icon name="check" size={12} color="#81c784" />
-                      <div style={{ fontSize: 11, color: "#81c784", lineHeight: 1.4 }}>
-                        Deleted: {cleanupResult.deleted.matches} matches, {cleanupResult.deleted.broadcasts} broadcasts, {cleanupResult.deleted.votes} votes
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
               <div>
                 <div style={{ fontSize: 12, color: "#aaa", marginBottom: 8, fontWeight: 600 }}>Select Dates</div>
                 <div style={{ display: "flex", gap: 6 }}>
@@ -1356,7 +1438,7 @@ Example broadcasts:
               {/* Fetch Fixtures */}
               <div>
                 <div style={{ fontSize: 11, color: "#888", marginBottom: 8 }}>
-                  Fetch all sports fixtures from TheSportsDB for selected dates.
+                  Fetch all sports events from TheSportsDB for selected dates.
                 </div>
                 <button
                   onClick={handleFetchFixtures}
@@ -1373,7 +1455,7 @@ Example broadcasts:
                     cursor: selectedDates.length > 0 && !fetchingFixtures ? "pointer" : "not-allowed"
                   }}
                 >
-                  {fetchingFixtures ? "Fetching..." : "Fetch Fixtures"}
+                  {fetchingFixtures ? "Fetching..." : "Fetch Events"}
                 </button>
               </div>
 
@@ -1401,6 +1483,30 @@ Example broadcasts:
                 </button>
               </div>
 
+              {/* Fetch Livescores */}
+              <div>
+                <div style={{ fontSize: 11, color: "#888", marginBottom: 8 }}>
+                  Fetch live match scores and update statuses in real-time.
+                </div>
+                <button
+                  onClick={handleFetchLivescores}
+                  disabled={fetchingLivescores}
+                  style={{
+                    width: "100%",
+                    padding: "10px 0",
+                    borderRadius: 8,
+                    border: "none",
+                    background: !fetchingLivescores ? "linear-gradient(135deg,#4caf50,#2e7d32)" : "#2a2a4a",
+                    color: "#fff",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: !fetchingLivescores ? "pointer" : "not-allowed"
+                  }}
+                >
+                  {fetchingLivescores ? "Fetching..." : "Fetch Livescores"}
+                </button>
+              </div>
+
               {/* Cleanup section */}
               <div>
                 <div style={{ fontSize: 11, color: "#888", marginBottom: 10, lineHeight: 1.5 }}>
@@ -1424,6 +1530,79 @@ Example broadcasts:
                   {cleaningUp ? "Cleaning up..." : "Cleanup Old Data"}
                 </button>
               </div>
+
+              {/* Combined results area - below all actions */}
+              {(fetchResult || broadcastResult || livescoreResult || (cleanupResult && cleanupResult.success && cleanupResult.deleted?.matches > 0)) && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {fetchResult && (
+                    <div style={{
+                      padding: 10,
+                      background: getStatusBg(fetchResult.status),
+                      border: `1px solid ${getStatusBorder(fetchResult.status)}`,
+                      borderRadius: 6,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                    }}>
+                      <Icon name="calendar" size={12} color="#00e5ff" />
+                      <div style={{ fontSize: 11, color: "#aaa", lineHeight: 1.4 }}>
+                        Found {fetchResult.eventsFound} events across {fetchResult.sportsFound} sports, inserted {fetchResult.eventsInserted}
+                      </div>
+                    </div>
+                  )}
+                  {broadcastResult && (
+                    <div style={{
+                      padding: 10,
+                      background: getStatusBg(broadcastResult.status),
+                      border: `1px solid ${getStatusBorder(broadcastResult.status)}`,
+                      borderRadius: 6,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                    }}>
+                      <Icon name="tv" size={12} color="#ff9f1c" />
+                      <div style={{ fontSize: 11, color: "#aaa", lineHeight: 1.4 }}>
+                        Found {broadcastResult.tvEventsFound} TV events, matched {broadcastResult.matched}, inserted {broadcastResult.broadcastsInserted} broadcasts
+                        {broadcastResult.unmatched > 0 && `, ${broadcastResult.unmatched} unmatched`}
+                      </div>
+                    </div>
+                  )}
+                  {livescoreResult && (
+                    <div style={{
+                      padding: 10,
+                      background: getStatusBg(livescoreResult.status),
+                      border: `1px solid ${getStatusBorder(livescoreResult.status)}`,
+                      borderRadius: 6,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                    }}>
+                      <Icon name="clock" size={12} color="#4caf50" />
+                      <div style={{ fontSize: 11, color: "#aaa", lineHeight: 1.4 }}>
+                        Processed {livescoreResult.livescoreEvents} events, updated {livescoreResult.updated}
+                        {livescoreResult.disappearedFinished > 0 && `, ${livescoreResult.disappearedFinished} marked finished`}
+                        {livescoreResult.errors?.length > 0 && `, ${livescoreResult.errors.length} errors`}
+                      </div>
+                    </div>
+                  )}
+                  {cleanupResult && cleanupResult.success && cleanupResult.deleted?.matches > 0 && (
+                    <div style={{
+                      padding: 10,
+                      background: "rgba(76,175,80,0.15)",
+                      border: "1px solid rgba(76,175,80,0.3)",
+                      borderRadius: 6,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                    }}>
+                      <Icon name="check" size={12} color="#81c784" />
+                      <div style={{ fontSize: 11, color: "#81c784", lineHeight: 1.4 }}>
+                        Deleted: {cleanupResult.deleted.matches} matches, {cleanupResult.deleted.broadcasts} broadcasts, {cleanupResult.deleted.votes} votes
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -1604,11 +1783,11 @@ Example broadcasts:
                             </button>
                             <div style={{ flex: 1, minWidth: 0, cursor: "pointer" }} onClick={() => toggleFixtureExpand(fixture.id)}>
                               <div style={{ fontSize: 11, color: "#fff", marginBottom: 4, fontWeight: 500 }}>
-                                {fixture.home} vs {fixture.away}
+                                {fixture.home && fixture.away ? `${fixture.home} vs ${fixture.away}` : fixture.event_name || fixture.league || 'Event'}
                               </div>
                               <div style={{ fontSize: 10, color: "#888", lineHeight: 1.4 }}>
-                                {fixture.sport} • {fixture.league}<br />
-                                {fixture.match_date} {fixture.match_time}
+                                {fixture.sport_name} • {fixture.league}<br />
+                                {fixture.event_date} {fixture.event_time}
                               </div>
                             </div>
                             <button
@@ -1965,11 +2144,15 @@ Example broadcasts:
                         }}
                       >
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 12, color: "#fff", marginBottom: 4, fontWeight: 500 }}>
-                            {user.email}
+                          <div style={{ fontSize: 12, color: "#fff", marginBottom: 2, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {user.email && user.email !== 'Unknown' ? user.email : user.displayName || 'Anonymous'}
                           </div>
+                          {user.displayName && user.email && user.email !== 'Unknown' && (
+                            <div style={{ fontSize: 10, color: "#666", marginBottom: 2 }}>{user.displayName}</div>
+                          )}
                           <div style={{ fontSize: 10, color: "#888" }}>
                             {user.broadcastCount} broadcast{user.broadcastCount !== 1 ? 's' : ''}
+                            {(!user.email || user.email === 'Unknown') && <span style={{ color: "#555" }}> · no email on record</span>}
                           </div>
                           {isBanned && (
                             <>
@@ -2391,7 +2574,7 @@ Example broadcasts:
                                 {b.country} - {b.channel}
                               </div>
                               <div style={{ fontSize: 9, color: "#555", fontFamily: "monospace" }}>
-                                {b.matches ? `${b.matches.home} vs ${b.matches.away}` : b.match_id}
+                                {b.events ? (b.events.home && b.events.away ? `${b.events.home} vs ${b.events.away}` : b.events.event_name || b.events.league || 'Event') : b.event_id}
                                 {' · '}{b.reason}
                                 {' · '}{new Date(b.blocked_at).toLocaleDateString()}
                               </div>

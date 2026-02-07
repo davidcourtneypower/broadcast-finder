@@ -269,14 +269,14 @@ export const FilterModal = ({ onClose, filters, onApply, allSports, matches, get
   // Filter countries based on selected sports
   const getFilteredCountries = () => {
     if (!matches || matches.length === 0 || localSports.length === 0) return []
-    const filteredMatches = matches.filter(m => localSports.includes(m.sport))
+    const filteredMatches = matches.filter(m => localSports.includes(m.sport_name))
     return [...new Set(filteredMatches.map(m => m.country))].sort()
   }
 
   // Filter events based on selected sports and countries
   const getFilteredEvents = () => {
     if (!matches || matches.length === 0 || localSports.length === 0) return []
-    let filteredMatches = matches.filter(m => localSports.includes(m.sport))
+    let filteredMatches = matches.filter(m => localSports.includes(m.sport_name))
     if (localCountries.length > 0) {
       filteredMatches = filteredMatches.filter(m => localCountries.includes(m.country))
     }
@@ -301,7 +301,7 @@ export const FilterModal = ({ onClose, filters, onApply, allSports, matches, get
   const getSportForLeague = (league) => {
     if (!matches || matches.length === 0) return null
     const match = matches.find(m => m.league === league)
-    return match ? match.sport : null
+    return match ? match.sport_name : null
   }
 
   const toggleSport = (sport) => {
@@ -312,7 +312,7 @@ export const FilterModal = ({ onClose, filters, onApply, allSports, matches, get
         setLocalCountries([])
         setLocalEvents([])
       } else if (matches) {
-        const sportFilteredMatches = matches.filter(m => newSports.includes(m.sport))
+        const sportFilteredMatches = matches.filter(m => newSports.includes(m.sport_name))
         const availableCountries = [...new Set(sportFilteredMatches.map(m => m.country))]
         setLocalCountries(prevCountries => prevCountries.filter(c => availableCountries.includes(c)))
         const availableEvents = [...new Set(sportFilteredMatches.map(m => m.league))]
