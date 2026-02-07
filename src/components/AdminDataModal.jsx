@@ -850,7 +850,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
           border: "1px solid #2a2a4a",
           borderTopColor: "transparent",
           boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
-          maxHeight: `calc(90dvh - ${headerHeight}px)`,
+          height: `calc(90dvh - ${headerHeight}px)`,
           display: "flex",
           flexDirection: "column",
           padding: 20,
@@ -903,8 +903,8 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
         </div>
 
         {/* Tab Content */}
-        <div style={{ flex: 1, position: "relative", minHeight: 0, overflow: "hidden" }}>
-        <div ref={scrollRef} onScroll={checkScroll} className="hidden-scrollbar" style={{ position: "absolute", inset: 0, overflowY: "auto", overflowX: "hidden" }}>
+        <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
+        <div ref={scrollRef} onScroll={checkScroll} className="hidden-scrollbar" style={{ height: "100%", overflowY: "auto", overflowX: "hidden" }}>
           {activeTab === 'import' && (
             <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
               <div style={{ fontSize: 11, color: "#888", marginBottom: 12, lineHeight: 1.5 }}>
