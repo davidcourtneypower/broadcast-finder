@@ -1,4 +1,4 @@
-name: Fetch All Sports Events
+name: Fetch All Events
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ jobs:
   fetch-events:
     runs-on: ubuntu-latest
     steps:
-      - name: Fetch All Sports Events from TheSportsDB
+      - name: Fetch All Events
         run: |
           curl -X POST "${{ secrets.PROJECT_URL }}/functions/v1/fetch-events" \
             -H "Authorization: Bearer ${{ secrets.SERVICE_ROLE_KEY }}" \

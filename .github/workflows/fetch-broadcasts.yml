@@ -1,4 +1,4 @@
-name: Fetch TV Broadcasts
+name: Fetch Broadcasts
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ jobs:
   fetch-broadcasts:
     runs-on: ubuntu-latest
     steps:
-      - name: Fetch TV Broadcasts from TheSportsDB
+      - name: Fetch Broadcasts 
         run: |
           curl -X POST "${{ secrets.PROJECT_URL }}/functions/v1/fetch-broadcasts" \
             -H "Authorization: Bearer ${{ secrets.SERVICE_ROLE_KEY }}" \
