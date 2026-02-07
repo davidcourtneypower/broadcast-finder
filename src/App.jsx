@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from './config/supabase'
 import { useAuth } from './hooks/useAuth'
 import { getTodayStr, getTomorrowStr } from './utils/helpers'
@@ -18,6 +18,7 @@ function App() {
   const { getSportConfig, getSportColors, getFlag, getCountryNames, getChannelsForCountry } = useReferenceData()
   const { formatTime, getStatus: getUserStatus, getRelative, preferences, loading: prefsLoading } = useUserPreferences(user)
   const [isAdmin, setIsAdmin] = useState(false)
+  const headerRef = useRef(null)
   const [showAuth, setShowAuth] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
   const [showAddBroadcast, setShowAddBroadcast] = useState(false)
@@ -596,7 +597,7 @@ function App() {
   return (
     <div style={{ minHeight: "100vh", background: "#0e0e1a", color: "#fff", maxWidth: 440, margin: "0 auto", fontFamily: "system-ui, sans-serif", display: "flex", flexDirection: "column" }}>
       {/* Header */}
-      <div style={{ background: "#12122a", borderBottom: "1px solid rgba(255,255,255,0.07)", padding: "12px 14px", position: "sticky", top: 0, zIndex: 10 }}>
+      <div ref={headerRef} style={{ background: "#12122a", borderBottom: "1px solid rgba(255,255,255,0.07)", padding: "12px 14px", position: "sticky", top: 0, zIndex: 10 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7, cursor: "pointer" }} onClick={() => window.location.reload()} title="Refresh">
             <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg,#00e5ff,#7c4dff)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -815,7 +816,7 @@ function App() {
       
       {/* Modals */}
       {showAuth && <AuthModal onClose={() => setShowAuth(false)} signInWithGoogle={signInWithGoogle} />}
-      {showFilters && <FilterModal onClose={() => setShowFilters(false)} filters={filters} onApply={setFilters} allSports={allSports} matches={matches} getSportColors={getSportColors} />}
+      {showFilters && <FilterModal onClose={() => setShowFilters(false)} filters={filters} onApply={setFilters} allSports={allSports} matches={matches} getSportColors={getSportColors} getFlag={getFlag} headerRef={headerRef} />}
       {showAddBroadcast && selectedMatch && <AddBroadcastModal onClose={() => setShowAddBroadcast(false)} match={selectedMatch} onAdd={handleAddBroadcast} user={user} countryNames={getCountryNames()} getChannelsForCountry={getChannelsForCountry} getFlag={getFlag} />}
       {showAdminPanel && <AdminDataModal onClose={() => setShowAdminPanel(false)} onUpdate={loadMatches} currentUserEmail={user?.email} />}
       {showUserSettings && <UserSettingsModal onClose={() => setShowUserSettings(false)} onSave={handleSettingsSaved} user={user} />}

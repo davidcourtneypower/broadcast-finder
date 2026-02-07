@@ -46,3 +46,37 @@ input, select, textarea {
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.12) rgba(255, 255, 255, 0.03);
 }
+
+/* Filter panel slide-down animation */
+.filter-panel-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 50;
+  opacity: 0;
+  transition: opacity 250ms ease;
+  pointer-events: none;
+}
+
+.filter-panel-backdrop.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.filter-panel {
+  position: fixed;
+  left: 0;
+  right: 0;
+  z-index: 60;
+  transform: translateY(-100%);
+  opacity: 0;
+  transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1), opacity 200ms ease;
+  pointer-events: none;
+}
+
+.filter-panel.visible {
+  transform: translateY(0);
+  opacity: 1;
+  pointer-events: auto;
+}

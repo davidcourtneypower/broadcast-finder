@@ -1,87 +1,5 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Icon } from './Icon'
-
-const AccordionSection = ({ title, count, selectedItems, isOpen, onToggle, disabled, disabledHint, children }) => (
-  <div style={{ marginBottom: 4 }}>
-    <button
-      onClick={disabled ? undefined : onToggle}
-      style={{
-        width: "100%",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "10px 12px",
-        background: disabled ? "rgba(255,255,255,0.02)" : "rgba(255,255,255,0.04)",
-        border: `1px solid ${disabled ? "#222238" : "#2a2a4a"}`,
-        borderRadius: isOpen && !disabled ? "8px 8px 0 0" : 8,
-        cursor: disabled ? "not-allowed" : "pointer",
-        opacity: disabled ? 0.4 : 1,
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flex: 1 }}>
-        <span style={{ fontSize: 11, color: "#888", textTransform: "uppercase", letterSpacing: 1, fontFamily: "monospace", fontWeight: 600, flexShrink: 0 }}>
-          {title}
-        </span>
-        {count > 0 && (
-          <span style={{ fontSize: 10, color: "#555", flexShrink: 0 }}>({count})</span>
-        )}
-        {!isOpen && selectedItems.length > 0 && (
-          <div style={{ display: "flex", gap: 4, marginLeft: 4, overflow: "hidden", flexShrink: 1, minWidth: 0 }}>
-            {selectedItems.slice(0, 3).map(item => (
-              <span key={item} style={{
-                padding: "2px 6px",
-                borderRadius: 4,
-                background: "rgba(0,229,255,0.12)",
-                border: "1px solid rgba(0,229,255,0.25)",
-                color: "#00e5ff",
-                fontSize: 9,
-                fontWeight: 600,
-                whiteSpace: "nowrap",
-                maxWidth: 70,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}>
-                {item}
-              </span>
-            ))}
-            {selectedItems.length > 3 && (
-              <span style={{
-                padding: "2px 6px",
-                borderRadius: 4,
-                background: "rgba(0,229,255,0.08)",
-                color: "rgba(0,229,255,0.7)",
-                fontSize: 9,
-                fontWeight: 600,
-                whiteSpace: "nowrap",
-                flexShrink: 0,
-              }}>
-                +{selectedItems.length - 3}
-              </span>
-            )}
-          </div>
-        )}
-      </div>
-      {disabled ? (
-        <span style={{ fontSize: 10, color: "#444", fontStyle: "italic", flexShrink: 0 }}>{disabledHint}</span>
-      ) : (
-        <Icon name={isOpen ? "chevUp" : "chevDown"} size={14} color="#555" />
-      )}
-    </button>
-    {isOpen && !disabled && (
-      <div className="dark-scrollbar" style={{
-        maxHeight: 180,
-        overflowY: "auto",
-        padding: "10px 12px",
-        background: "rgba(0,0,0,0.15)",
-        border: "1px solid #2a2a4a",
-        borderTop: "none",
-        borderRadius: "0 0 8px 8px",
-      }}>
-        {children}
-      </div>
-    )}
-  </div>
-)
 
 const SearchInput = ({ value, onChange, placeholder }) => (
   <div style={{ position: "relative", marginBottom: 8 }}>
@@ -108,34 +26,224 @@ const SearchInput = ({ value, onChange, placeholder }) => (
 
 const STATUS_OPTIONS = [
   { value: 'live', label: 'LIVE', color: '#e53935' },
-  { value: 'starting-soon', label: 'STARTING SOON', color: '#7c4dff' },
+  { value: 'starting-soon', label: 'SOON', color: '#7c4dff' },
   { value: 'upcoming', label: 'UPCOMING', color: '#26a69a' },
   { value: 'finished', label: 'FINISHED', color: '#666' }
 ]
 
-const STATUS_LABEL_MAP = { 'live': 'LIVE', 'starting-soon': 'SOON', 'upcoming': 'UPCOMING', 'finished': 'FINISHED' }
+const SectionHeader = ({ title, count, disabled, style }) => (
+  <div style={{
+    fontSize: 11,
+    color: disabled ? "#444" : "#888",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    fontFamily: "monospace",
+    fontWeight: 600,
+    marginBottom: 10,
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    ...style,
+  }}>
+    {title}
+    {count > 0 && <span style={{ color: "#555", fontWeight: 400 }}>({count})</span>}
+  </div>
+)
 
-export const FilterModal = ({ onClose, filters, onApply, allSports, matches, getSportColors }) => {
+const StatusGridItem = ({ status, isSelected, onToggle }) => (
+  <button
+    onClick={() => onToggle(status.value)}
+    style={{
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      gap: 6,
+      padding: "10px 4px",
+      cursor: "pointer",
+      borderRadius: 8,
+      background: isSelected ? `${status.color}18` : "transparent",
+      border: `1px solid ${isSelected ? `${status.color}66` : "transparent"}`,
+    }}
+  >
+    <div style={{
+      width: 12,
+      height: 12,
+      borderRadius: "50%",
+      background: status.color,
+      opacity: isSelected ? 1 : 0.3,
+      transition: "opacity 0.15s ease",
+    }} />
+    <span style={{
+      fontSize: 9,
+      fontWeight: 600,
+      color: isSelected ? status.color : "#666",
+      textTransform: "uppercase",
+      letterSpacing: 0.3,
+      textAlign: "center",
+      lineHeight: 1.2,
+    }}>
+      {status.label}
+    </span>
+  </button>
+)
+
+const SportGridItem = ({ sport, isSelected, onToggle, colors }) => (
+  <button
+    onClick={() => onToggle(sport)}
+    style={{
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      gap: 6,
+      padding: "8px 4px",
+      cursor: "pointer",
+      borderRadius: 8,
+      background: "transparent",
+      border: "none",
+    }}
+  >
+    <div style={{
+      width: 48,
+      height: 48,
+      borderRadius: "50%",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      border: `2px solid ${isSelected ? colors.accent : "#2a2a4a"}`,
+      background: isSelected ? colors.bg : "#111122",
+      transition: "all 0.15s ease",
+    }}>
+      <Icon name={sport.toLowerCase()} size={22} color={isSelected ? colors.accent : "#666"} />
+    </div>
+    <span style={{
+      fontSize: 10,
+      fontWeight: 600,
+      color: isSelected ? colors.accent : "#888",
+      textAlign: "center",
+      maxWidth: "100%",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap",
+      lineHeight: 1.2,
+    }}>
+      {sport}
+    </span>
+  </button>
+)
+
+const CountryGridItem = ({ country, flag, isSelected, onToggle }) => (
+  <button
+    onClick={() => onToggle(country)}
+    style={{
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      gap: 6,
+      padding: "8px 4px",
+      cursor: "pointer",
+      borderRadius: 8,
+      background: "transparent",
+      border: "none",
+    }}
+  >
+    <div style={{
+      width: 44,
+      height: 44,
+      borderRadius: "50%",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      border: `2px solid ${isSelected ? "#00e5ff" : "#2a2a4a"}`,
+      background: isSelected ? "rgba(0,229,255,0.12)" : "#111122",
+      fontSize: 22,
+      transition: "all 0.15s ease",
+    }}>
+      {flag}
+    </div>
+    <span style={{
+      fontSize: 10,
+      fontWeight: 600,
+      color: isSelected ? "#ddd" : "#888",
+      textAlign: "center",
+      maxWidth: "100%",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap",
+      lineHeight: 1.2,
+    }}>
+      {country}
+    </span>
+  </button>
+)
+
+const LeagueGridItem = ({ league, isSelected, onToggle, sportColors }) => (
+  <button
+    onClick={() => onToggle(league)}
+    style={{
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      padding: "8px 10px",
+      borderRadius: 8,
+      border: `1px solid ${isSelected ? sportColors.accent : "#2a2a4a"}`,
+      background: isSelected ? sportColors.bg : "#111122",
+      cursor: "pointer",
+      textAlign: "left",
+    }}
+  >
+    <div style={{
+      width: 32,
+      height: 32,
+      borderRadius: "50%",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      background: isSelected ? `${sportColors.accent}33` : "rgba(255,255,255,0.05)",
+      flexShrink: 0,
+    }}>
+      <Icon name={sportColors.sportName || ""} size={16} color={isSelected ? sportColors.accent : "#666"} />
+    </div>
+    <span style={{
+      fontSize: 11,
+      color: isSelected ? sportColors.accent : "#888",
+      fontWeight: 500,
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      display: "-webkit-box",
+      WebkitLineClamp: 2,
+      WebkitBoxOrient: "vertical",
+      lineHeight: 1.3,
+    }}>
+      {league}
+    </span>
+  </button>
+)
+
+export const FilterModal = ({ onClose, filters, onApply, allSports, matches, getSportColors, getFlag, headerRef }) => {
+  const [isVisible, setIsVisible] = useState(false)
   const [localSports, setLocalSports] = useState(filters.sports || [])
   const [localCountries, setLocalCountries] = useState(filters.countries || [])
   const [localEvents, setLocalEvents] = useState(filters.events || [])
   const [localStatuses, setLocalStatuses] = useState(filters.statuses || [])
-
-  const [openSections, setOpenSections] = useState({
-    status: true, sport: true, country: false, league: false
-  })
   const [sportSearch, setSportSearch] = useState("")
   const [leagueSearch, setLeagueSearch] = useState("")
 
-  const toggleSection = (section) => {
-    setOpenSections(prev => {
-      const newState = { ...prev, [section]: !prev[section] }
-      if (!newState[section]) {
-        if (section === 'sport') setSportSearch("")
-        if (section === 'league') setLeagueSearch("")
-      }
-      return newState
-    })
+  const headerHeight = headerRef?.current?.offsetHeight || 0
+
+  useEffect(() => {
+    requestAnimationFrame(() => requestAnimationFrame(() => setIsVisible(true)))
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = '' }
+  }, [])
+
+  const handleClose = () => {
+    setIsVisible(false)
+    setTimeout(onClose, 300)
+  }
+
+  const handleApply = () => {
+    onApply({ sports: localSports, countries: localCountries, events: localEvents, statuses: localStatuses })
+    handleClose()
   }
 
   // Filter countries based on selected sports
@@ -179,7 +287,6 @@ export const FilterModal = ({ onClose, filters, onApply, allSports, matches, get
       if (newSports.length === 0) {
         setLocalCountries([])
         setLocalEvents([])
-        setOpenSections(prev => ({ ...prev, country: false, league: false }))
       } else if (matches) {
         const sportFilteredMatches = matches.filter(m => newSports.includes(m.sport))
         const availableCountries = [...new Set(sportFilteredMatches.map(m => m.country))]
@@ -218,189 +325,155 @@ export const FilterModal = ({ onClose, filters, onApply, allSports, matches, get
     setLocalStatuses([])
   }
 
-  const apply = () => {
-    onApply({ sports: localSports, countries: localCountries, events: localEvents, statuses: localStatuses })
-    onClose()
-  }
-
   const activeCount = localSports.length + localCountries.length + localEvents.length + localStatuses.length
   const countriesDisabled = localSports.length === 0
   const leaguesDisabled = localSports.length === 0
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.72)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: "#1a1a2e", borderRadius: 16, padding: 20, width: "90%", maxWidth: 380, border: "1px solid #2a2a4a", position: "relative", maxHeight: "75vh", display: "flex", flexDirection: "column" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-          <h3 style={{ color: "#fff", margin: 0, fontSize: 18 }}>Filters</h3>
-          <button onClick={onClose} style={{ background: "none", border: "none", color: "#888", cursor: "pointer" }}>
+    <>
+      {/* Backdrop */}
+      <div
+        className={`filter-panel-backdrop ${isVisible ? 'visible' : ''}`}
+        onClick={handleClose}
+      />
+
+      {/* Panel */}
+      <div
+        className={`filter-panel ${isVisible ? 'visible' : ''}`}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          top: headerHeight,
+          maxWidth: 440,
+          margin: "0 auto",
+          maxHeight: `calc(100vh - ${headerHeight}px - 20px)`,
+          background: "#1a1a2e",
+          borderRadius: "0 0 16px 16px",
+          border: "1px solid #2a2a4a",
+          borderTop: "none",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        {/* Panel Header */}
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "12px 16px",
+          borderBottom: "1px solid rgba(255,255,255,0.06)",
+          flexShrink: 0,
+        }}>
+          <h3 style={{ color: "#fff", margin: 0, fontSize: 16, fontWeight: 700 }}>Filters</h3>
+          <button onClick={handleClose} style={{ background: "none", border: "none", color: "#888", cursor: "pointer", padding: 4 }}>
             <Icon name="x" size={18} />
           </button>
         </div>
 
-        <div className="dark-scrollbar" style={{ flex: 1, overflowY: "auto", marginBottom: 16 }}>
+        {/* Scrollable Content */}
+        <div className="dark-scrollbar" style={{ flex: 1, overflowY: "auto", padding: "12px 16px" }}>
+
           {/* Status */}
-          <AccordionSection
-            title="Status"
-            count={4}
-            selectedItems={localStatuses.map(s => STATUS_LABEL_MAP[s] || s)}
-            isOpen={openSections.status}
-            onToggle={() => toggleSection('status')}
-          >
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-              {STATUS_OPTIONS.map(status => {
-                const isSelected = localStatuses.includes(status.value)
-                return (
-                  <button
-                    key={status.value}
-                    onClick={() => toggleStatus(status.value)}
-                    style={{
-                      padding: "6px 12px",
-                      borderRadius: 8,
-                      border: `1px solid ${isSelected ? status.color : "#2a2a4a"}`,
-                      background: isSelected ? `${status.color}22` : "#111122",
-                      color: isSelected ? status.color : "#888",
-                      fontSize: 11,
-                      fontWeight: 600,
-                      cursor: "pointer",
-                      textTransform: "uppercase",
-                      letterSpacing: 0.5
-                    }}
-                  >
-                    {status.label}
-                  </button>
-                )
-              })}
-            </div>
-          </AccordionSection>
+          <SectionHeader title="Status" count={4} />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginBottom: 8 }}>
+            {STATUS_OPTIONS.map(status => (
+              <StatusGridItem
+                key={status.value}
+                status={status}
+                isSelected={localStatuses.includes(status.value)}
+                onToggle={toggleStatus}
+              />
+            ))}
+          </div>
 
           {/* Sport */}
-          <AccordionSection
-            title="Sport"
-            count={allSports.length}
-            selectedItems={localSports}
-            isOpen={openSections.sport}
-            onToggle={() => toggleSection('sport')}
-          >
-            {allSports.length > 8 && (
-              <SearchInput value={sportSearch} onChange={setSportSearch} placeholder="Search sports..." />
-            )}
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-              {displayedSports.map(sport => {
-                const isSelected = localSports.includes(sport)
-                const col = getSportColors ? getSportColors(sport) : { accent: "#00e5ff", bg: "rgba(0,229,255,0.12)" }
-                return (
-                  <button
-                    key={sport}
-                    onClick={() => toggleSport(sport)}
-                    style={{
-                      padding: "6px 12px",
-                      borderRadius: 8,
-                      border: `1px solid ${isSelected ? col.accent : "#2a2a4a"}`,
-                      background: isSelected ? col.bg : "#111122",
-                      color: isSelected ? col.accent : "#888",
-                      fontSize: 12,
-                      fontWeight: 600,
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 5,
-                    }}
-                  >
-                    <Icon name={sport.toLowerCase()} size={13} color={isSelected ? col.accent : "#888"} />
-                    {sport}
-                  </button>
-                )
-              })}
-              {sportSearch && displayedSports.length === 0 && (
-                <div style={{ fontSize: 11, color: "#555", padding: "4px 0" }}>No matches</div>
-              )}
-            </div>
-          </AccordionSection>
+          <SectionHeader title="Sport" count={allSports.length} style={{ marginTop: 12 }} />
+          {allSports.length > 8 && (
+            <SearchInput value={sportSearch} onChange={setSportSearch} placeholder="Search sports..." />
+          )}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 4, marginBottom: 8 }}>
+            {displayedSports.map(sport => {
+              const col = getSportColors ? getSportColors(sport) : { accent: "#00e5ff", bg: "rgba(0,229,255,0.12)" }
+              return (
+                <SportGridItem
+                  key={sport}
+                  sport={sport}
+                  isSelected={localSports.includes(sport)}
+                  onToggle={toggleSport}
+                  colors={col}
+                />
+              )
+            })}
+          </div>
+          {sportSearch && displayedSports.length === 0 && (
+            <div style={{ fontSize: 11, color: "#555", padding: "4px 0" }}>No matches</div>
+          )}
 
           {/* Country */}
-          <AccordionSection
-            title="Country"
-            count={filteredCountries.length}
-            selectedItems={localCountries}
-            isOpen={openSections.country}
-            onToggle={() => toggleSection('country')}
-            disabled={countriesDisabled}
-            disabledHint="Select a sport"
-          >
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-              {filteredCountries.map(country => {
-                const isSelected = localCountries.includes(country)
-                return (
-                  <button
+          <SectionHeader title="Country" count={filteredCountries.length} disabled={countriesDisabled} style={{ marginTop: 12 }} />
+          {countriesDisabled ? (
+            <div style={{ fontSize: 11, color: "#444", fontStyle: "italic", padding: "4px 0 8px" }}>Select a sport first</div>
+          ) : (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4, marginBottom: 8 }}>
+                {filteredCountries.map(country => (
+                  <CountryGridItem
                     key={country}
-                    onClick={() => toggleCountry(country)}
-                    style={{
-                      padding: "5px 10px",
-                      borderRadius: 6,
-                      border: `1px solid ${isSelected ? "#666" : "#2a2a4a"}`,
-                      background: isSelected ? "rgba(255,255,255,0.1)" : "#111122",
-                      color: isSelected ? "#ddd" : "#888",
-                      fontSize: 11,
-                      cursor: "pointer"
-                    }}
-                  >
-                    {country}
-                  </button>
-                )
-              })}
+                    country={country}
+                    flag={getFlag ? getFlag(country) : "🌍"}
+                    isSelected={localCountries.includes(country)}
+                    onToggle={toggleCountry}
+                  />
+                ))}
+              </div>
               {filteredCountries.length === 0 && (
                 <div style={{ fontSize: 11, color: "#555", padding: "4px 0" }}>No countries for selected sports</div>
               )}
-            </div>
-          </AccordionSection>
+            </>
+          )}
 
           {/* League */}
-          <AccordionSection
-            title="League"
-            count={filteredEvents.length}
-            selectedItems={localEvents}
-            isOpen={openSections.league}
-            onToggle={() => toggleSection('league')}
-            disabled={leaguesDisabled}
-            disabledHint="Select a sport"
-          >
-            {filteredEvents.length > 8 && (
-              <SearchInput value={leagueSearch} onChange={setLeagueSearch} placeholder="Search leagues..." />
-            )}
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-              {displayedLeagues.map(event => {
-                const isSelected = localEvents.includes(event)
-                const sport = getSportForLeague(event)
-                const sportColors = sport && getSportColors ? getSportColors(sport) : { accent: "#00e5ff", bg: "rgba(0,229,255,0.15)" }
-                return (
-                  <button
-                    key={event}
-                    onClick={() => toggleEvent(event)}
-                    style={{
-                      padding: "5px 10px",
-                      borderRadius: 6,
-                      border: `1px solid ${isSelected ? sportColors.accent : "#2a2a4a"}`,
-                      background: isSelected ? sportColors.bg : "#111122",
-                      color: isSelected ? sportColors.accent : "#888",
-                      fontSize: 11,
-                      cursor: "pointer"
-                    }}
-                  >
-                    {event}
-                  </button>
-                )
-              })}
+          <SectionHeader title="League" count={filteredEvents.length} disabled={leaguesDisabled} style={{ marginTop: 12 }} />
+          {leaguesDisabled ? (
+            <div style={{ fontSize: 11, color: "#444", fontStyle: "italic", padding: "4px 0 8px" }}>Select a sport first</div>
+          ) : (
+            <>
+              {filteredEvents.length > 8 && (
+                <SearchInput value={leagueSearch} onChange={setLeagueSearch} placeholder="Search leagues..." />
+              )}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6, marginBottom: 8 }}>
+                {displayedLeagues.map(event => {
+                  const sport = getSportForLeague(event)
+                  const sportCol = sport && getSportColors ? getSportColors(sport) : { accent: "#00e5ff", bg: "rgba(0,229,255,0.15)" }
+                  return (
+                    <LeagueGridItem
+                      key={event}
+                      league={event}
+                      isSelected={localEvents.includes(event)}
+                      onToggle={toggleEvent}
+                      sportColors={{ ...sportCol, sportName: sport ? sport.toLowerCase() : "" }}
+                    />
+                  )
+                })}
+              </div>
               {leagueSearch && displayedLeagues.length === 0 && (
                 <div style={{ fontSize: 11, color: "#555", padding: "4px 0" }}>No matches</div>
               )}
               {!leagueSearch && filteredEvents.length === 0 && (
                 <div style={{ fontSize: 11, color: "#555", padding: "4px 0" }}>No leagues for selected filters</div>
               )}
-            </div>
-          </AccordionSection>
+            </>
+          )}
         </div>
 
-        <div style={{ display: "flex", gap: 8 }}>
+        {/* Footer */}
+        <div style={{
+          padding: "12px 16px",
+          borderTop: "1px solid rgba(255,255,255,0.06)",
+          display: "flex",
+          gap: 8,
+          flexShrink: 0,
+        }}>
           <button
             onClick={clearAll}
             style={{
@@ -412,13 +485,13 @@ export const FilterModal = ({ onClose, filters, onApply, allSports, matches, get
               color: "#aaa",
               fontSize: 13,
               fontWeight: 600,
-              cursor: "pointer"
+              cursor: "pointer",
             }}
           >
             Clear
           </button>
           <button
-            onClick={apply}
+            onClick={handleApply}
             style={{
               flex: 2,
               padding: "10px 0",
@@ -428,13 +501,13 @@ export const FilterModal = ({ onClose, filters, onApply, allSports, matches, get
               color: "#fff",
               fontSize: 14,
               fontWeight: 600,
-              cursor: "pointer"
+              cursor: "pointer",
             }}
           >
             Apply {activeCount > 0 ? `(${activeCount})` : ""}
           </button>
         </div>
       </div>
-    </div>
+    </>
   )
 }
