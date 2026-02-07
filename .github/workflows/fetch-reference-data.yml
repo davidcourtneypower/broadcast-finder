@@ -1,0 +1,15 @@
+name: Fetch Reference Data
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fetch-reference-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch Reference Data
+        run: |
+          curl -X POST "${{ secrets.PROJECT_URL }}/functions/v1/fetch-reference-data" \
+            -H "Authorization: Bearer ${{ secrets.SERVICE_ROLE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"trigger":"manual"}'

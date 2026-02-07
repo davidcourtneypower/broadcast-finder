@@ -876,6 +876,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
     'fetch-events': 'Fetch Events',
     'fetch-broadcasts': 'Fetch Broadcasts',
     'fetch-livestatus': 'Fetch Livestatus',
+    'fetch-reference-data': 'Fetch Reference Data',
     'cleanup-old-data': 'Cleanup Old Data'
   }
 
@@ -912,6 +913,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
     'cron_fetch_events': 'fetch-events',
     'cron_fetch_broadcasts': 'fetch-broadcasts',
     'cron_fetch_livestatus': 'fetch-livestatus',
+    'cron_fetch_reference_data': 'fetch-reference-data',
     'cron_cleanup': 'cleanup-old-data'
   }
 
