@@ -419,8 +419,9 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
   const loadLogs = async () => {
     setLoadingLogs(true)
     try {
+      let allLogs = []
+
       if (logTypeFilter === "all" || logTypeFilter === "api_fetch") {
-        // Load API fetch logs
         const { data, error } = await supabase
           .from('api_fetch_logs')
           .select('*')
@@ -429,7 +430,6 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
 
         if (error) throw error
 
-        // Transform to unified format
         const apiLogs = (data || []).map(log => ({
           id: log.id,
           type: 'api_fetch',
@@ -445,12 +445,10 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
             error_message: log.error_message
           }
         }))
-
-        setLogs(apiLogs)
+        allLogs = [...allLogs, ...apiLogs]
       }
 
       if (logTypeFilter === "all" || logTypeFilter === "admin_actions") {
-        // Load admin action logs
         const { data, error } = await supabase
           .from('admin_action_logs')
           .select('*')
@@ -467,17 +465,13 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
             created_at: log.created_at,
             details: log.details || {}
           }))
-
-          if (logTypeFilter === "admin_actions") {
-            setLogs(actionLogs)
-          } else {
-            // Combine and sort by date
-            setLogs(prev => [...prev, ...actionLogs].sort((a, b) =>
-              new Date(b.created_at) - new Date(a.created_at)
-            ).slice(0, 50))
-          }
+          allLogs = [...allLogs, ...actionLogs]
         }
       }
+
+      // Sort combined logs by date and limit
+      allLogs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      setLogs(allLogs.slice(0, 50))
     } catch (e) {
       console.error('Error loading logs:', e)
     }
@@ -1696,26 +1690,15 @@ Example broadcasts:
               bottom: 0,
               left: 0,
               right: 0,
-              height: 40,
-              background: "linear-gradient(transparent, rgba(26,26,46,0.95))",
+              height: 32,
+              background: "linear-gradient(transparent, #1a1a2e)",
               display: "flex",
               alignItems: "flex-end",
               justifyContent: "center",
-              paddingBottom: 6,
+              paddingBottom: 4,
               pointerEvents: "none",
             }}>
-              <div className="scroll-hint-bounce" style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 4,
-                padding: "3px 10px",
-                borderRadius: 12,
-                background: "rgba(0,229,255,0.1)",
-                border: "1px solid rgba(0,229,255,0.2)",
-              }}>
-                <Icon name="chevDown" size={10} color="rgba(0,229,255,0.6)" />
-                <span style={{ fontSize: 9, color: "rgba(0,229,255,0.6)", fontWeight: 600, letterSpacing: 0.5 }}>MORE</span>
-              </div>
+              <Icon name="chevDown" size={14} color="#666" />
             </div>
           )}
         </div>
