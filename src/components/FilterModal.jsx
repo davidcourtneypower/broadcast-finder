@@ -300,9 +300,13 @@ export const FilterModal = ({ onClose, filters, onApply, allSports, matches, get
                       color: isSelected ? col.accent : "#888",
                       fontSize: 12,
                       fontWeight: 600,
-                      cursor: "pointer"
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 5,
                     }}
                   >
+                    <Icon name={sport.toLowerCase()} size={13} color={isSelected ? col.accent : "#888"} />
                     {sport}
                   </button>
                 )

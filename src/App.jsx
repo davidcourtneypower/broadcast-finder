@@ -601,11 +601,11 @@ function App() {
           <div style={{ display: "flex", alignItems: "center", gap: 7, cursor: "pointer" }} onClick={() => window.location.reload()} title="Refresh">
             <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg,#00e5ff,#7c4dff)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <svg width="18" height="18" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect x="2" y="6" width="28" height="20" rx="3" stroke="#fff" strokeWidth="2.2" fill="none" />
-                <line x1="10" y1="28" x2="22" y2="28" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" />
-                <line x1="16" y1="26" x2="16" y2="28" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" />
-                <circle cx="16" cy="16" r="5" stroke="#fff" strokeWidth="1.8" fill="none" />
-                <path d="M13.5 16 L15.2 18 L19 13.5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                <rect x="3" y="7" width="26" height="17" rx="2.5" stroke="#fff" strokeWidth="2" fill="none" />
+                <line x1="11" y1="27" x2="21" y2="27" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
+                <line x1="16" y1="24" x2="16" y2="27" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
+                <path d="M13 18l3-5 3 5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                <path d="M10 20l6-10 6 10" stroke="#fff" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" fill="none" opacity="0.5" />
               </svg>
             </div>
             <div>
