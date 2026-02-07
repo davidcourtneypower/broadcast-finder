@@ -837,7 +837,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
           border: "1px solid #2a2a4a",
           borderTopColor: "transparent",
           boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
-          maxHeight: `calc(90vh - ${headerHeight}px)`,
+          maxHeight: `calc(90dvh - ${headerHeight}px)`,
           display: "flex",
           flexDirection: "column",
           padding: 20,
@@ -854,13 +854,13 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
         </div>
 
         {/* Tabs */}
-        <div style={{ display: "flex", gap: 4, marginBottom: 16, borderBottom: "1px solid #2a2a4a", paddingBottom: 0 }}>
+        <div style={{ display: "flex", gap: 2, marginBottom: 16, borderBottom: "1px solid #2a2a4a", paddingBottom: 0 }}>
           {[
-            { id: 'import', label: 'Import', icon: 'upload' },
-            { id: 'fetch', label: 'Manage', icon: 'download' },
-            { id: 'fixtures', label: 'Fixtures', icon: 'calendar' },
-            { id: 'users', label: 'Users', icon: 'shield' },
-            { id: 'logs', label: 'Logs', icon: 'list' }
+            { id: 'import', label: 'Import' },
+            { id: 'fetch', label: 'Manage' },
+            { id: 'fixtures', label: 'Fixtures' },
+            { id: 'users', label: 'Users' },
+            { id: 'logs', label: 'Logs' }
           ].map(tab => {
             const active = activeTab === tab.id
             return (
@@ -869,21 +869,20 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
                 onClick={() => setActiveTab(tab.id)}
                 style={{
                   flex: 1,
-                  padding: "8px 12px",
+                  padding: "8px 4px",
                   background: active ? "rgba(0,229,255,0.15)" : "transparent",
                   border: "none",
                   borderBottom: active ? "2px solid #00e5ff" : "2px solid transparent",
                   color: active ? "#00e5ff" : "#666",
-                  fontSize: 12,
+                  fontSize: 11,
                   fontWeight: 600,
                   cursor: "pointer",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  gap: 6
+                  whiteSpace: "nowrap",
                 }}
               >
-                <Icon name={tab.icon} size={12} />
                 {tab.label}
               </button>
             )

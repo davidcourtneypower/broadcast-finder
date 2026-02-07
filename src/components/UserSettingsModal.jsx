@@ -137,7 +137,7 @@ export const UserSettingsModal = ({ onClose, onSave, user, headerRef }) => {
           border: "1px solid #2a2a4a",
           borderTopColor: "transparent",
           boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
-          maxHeight: `calc(90vh - ${headerHeight}px)`,
+          maxHeight: `calc(90dvh - ${headerHeight}px)`,
           display: "flex",
           flexDirection: "column",
           padding: 24,
