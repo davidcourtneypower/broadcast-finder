@@ -46,7 +46,8 @@ const TIMEZONE_GROUPS = {
   ],
 }
 
-export const UserSettingsModal = ({ onClose, onSave, user }) => {
+export const UserSettingsModal = ({ onClose, onSave, user, headerRef }) => {
+  const [isVisible, setIsVisible] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [preferences, setPreferences] = useState({
@@ -54,6 +55,17 @@ export const UserSettingsModal = ({ onClose, onSave, user }) => {
     timeFormat: '24h',
     dateFormat: 'YYYY-MM-DD',
   })
+
+  useEffect(() => {
+    requestAnimationFrame(() => requestAnimationFrame(() => setIsVisible(true)))
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = '' }
+  }, [])
+
+  const handleClose = () => {
+    setIsVisible(false)
+    setTimeout(onClose, 300)
+  }
 
   useEffect(() => {
     const loadPreferences = async () => {
@@ -107,16 +119,42 @@ export const UserSettingsModal = ({ onClose, onSave, user }) => {
     setPreferences({ ...preferences, timezone: browserTimezone })
   }
 
+  const headerHeight = headerRef?.current?.offsetHeight || 56
+
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.72)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: "#1a1a2e", borderRadius: 16, padding: 24, width: "90%", maxWidth: 420, maxHeight: "80vh", overflowY: "auto", border: "1px solid #2a2a4a", position: "relative" }}>
-        <button onClick={onClose} style={{ position: "absolute", top: 12, right: 12, background: "none", border: "none", color: "#888", cursor: "pointer", display: "flex" }}>
-          <Icon name="x" size={18} />
-        </button>
+    <>
+      <div className={`filter-panel-backdrop ${isVisible ? 'visible' : ''}`} onClick={handleClose} />
+      <div
+        className={`filter-panel ${isVisible ? 'visible' : ''}`}
+        style={{
+          top: headerHeight,
+          maxWidth: 440,
+          width: "95%",
+          margin: "0 auto",
+          background: "#1a1a2e",
+          borderRadius: "0 0 16px 16px",
+          borderTop: "none",
+          border: "1px solid #2a2a4a",
+          borderTopColor: "transparent",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+          maxHeight: `calc(90vh - ${headerHeight}px)`,
+          display: "flex",
+          flexDirection: "column",
+          padding: 24,
+        }}
+      >
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <div>
+            <h2 style={{ color: "#fff", margin: "0 0 4px", fontSize: 18 }}>Settings</h2>
+            <p style={{ color: "#666", margin: 0, fontSize: 12 }}>Customize your experience</p>
+          </div>
+          <button onClick={handleClose} style={{ background: "none", border: "none", color: "#888", cursor: "pointer", display: "flex" }}>
+            <Icon name="x" size={18} />
+          </button>
+        </div>
 
-        <h2 style={{ color: "#fff", margin: "0 0 8px", fontSize: 18 }}>Settings</h2>
-        <p style={{ color: "#666", margin: "0 0 24px", fontSize: 12 }}>Customize your experience</p>
-
+        <div className="dark-scrollbar" style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
         {loading ? (
           <div style={{ textAlign: "center", padding: "40px 0", color: "#666" }}>
             Loading preferences...
@@ -253,9 +291,9 @@ export const UserSettingsModal = ({ onClose, onSave, user }) => {
             </div>
 
             {/* Save Button */}
-            <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ display: "flex", gap: 8, paddingTop: 8 }}>
               <button
-                onClick={onClose}
+                onClick={handleClose}
                 style={{
                   flex: 1,
                   padding: "11px 0",
@@ -290,7 +328,8 @@ export const UserSettingsModal = ({ onClose, onSave, user }) => {
             </div>
           </>
         )}
+        </div>
       </div>
-    </div>
+    </>
   )
 }

@@ -62,7 +62,7 @@ const StatusGridItem = ({ status, isSelected, onToggle }) => (
       cursor: "pointer",
       borderRadius: 8,
       background: isSelected ? `${status.color}18` : "transparent",
-      border: `1px solid ${isSelected ? `${status.color}66` : "transparent"}`,
+      border: `1px solid ${isSelected ? (status.color === '#666' ? '#999' : `${status.color}88`) : "transparent"}`,
     }}
   >
     <div style={{
@@ -147,8 +147,8 @@ const CountryGridItem = ({ country, flag, isSelected, onToggle }) => (
     }}
   >
     <div style={{
-      width: 44,
-      height: 44,
+      width: 48,
+      height: 48,
       borderRadius: "50%",
       display: "flex",
       alignItems: "center",
@@ -181,38 +181,39 @@ const LeagueGridItem = ({ league, isSelected, onToggle, sportColors }) => (
     onClick={() => onToggle(league)}
     style={{
       display: "flex",
+      flexDirection: "column",
       alignItems: "center",
-      gap: 8,
-      padding: "8px 10px",
-      borderRadius: 8,
-      border: `1px solid ${isSelected ? sportColors.accent : "#2a2a4a"}`,
-      background: isSelected ? sportColors.bg : "#111122",
+      gap: 6,
+      padding: "8px 4px",
       cursor: "pointer",
-      textAlign: "left",
+      borderRadius: 8,
+      background: "transparent",
+      border: "none",
     }}
   >
     <div style={{
-      width: 32,
-      height: 32,
+      width: 44,
+      height: 44,
       borderRadius: "50%",
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      background: isSelected ? `${sportColors.accent}33` : "rgba(255,255,255,0.05)",
-      flexShrink: 0,
+      border: `2px solid ${isSelected ? sportColors.accent : "#2a2a4a"}`,
+      background: isSelected ? sportColors.bg : "#111122",
+      transition: "all 0.15s ease",
     }}>
-      <Icon name={sportColors.sportName || ""} size={16} color={isSelected ? sportColors.accent : "#666"} />
+      <Icon name={sportColors.sportName || ""} size={20} color={isSelected ? sportColors.accent : "#666"} />
     </div>
     <span style={{
-      fontSize: 11,
+      fontSize: 9,
       color: isSelected ? sportColors.accent : "#888",
-      fontWeight: 500,
+      fontWeight: 600,
+      textAlign: "center",
+      maxWidth: "100%",
       overflow: "hidden",
       textOverflow: "ellipsis",
-      display: "-webkit-box",
-      WebkitLineClamp: 2,
-      WebkitBoxOrient: "vertical",
-      lineHeight: 1.3,
+      whiteSpace: "nowrap",
+      lineHeight: 1.2,
     }}>
       {league}
     </span>
@@ -226,6 +227,7 @@ export const FilterModal = ({ onClose, filters, onApply, allSports, matches, get
   const [localEvents, setLocalEvents] = useState(filters.events || [])
   const [localStatuses, setLocalStatuses] = useState(filters.statuses || [])
   const [sportSearch, setSportSearch] = useState("")
+  const [countrySearch, setCountrySearch] = useState("")
   const [leagueSearch, setLeagueSearch] = useState("")
 
   const headerHeight = headerRef?.current?.offsetHeight || 0
@@ -269,6 +271,10 @@ export const FilterModal = ({ onClose, filters, onApply, allSports, matches, get
   const displayedSports = sportSearch
     ? allSports.filter(s => s.toLowerCase().includes(sportSearch.toLowerCase()))
     : allSports
+
+  const displayedCountries = countrySearch
+    ? filteredCountries.filter(c => c.toLowerCase().includes(countrySearch.toLowerCase()))
+    : filteredCountries
 
   const displayedLeagues = leagueSearch
     ? filteredEvents.filter(e => e.toLowerCase().includes(leagueSearch.toLowerCase()))
@@ -391,19 +397,21 @@ export const FilterModal = ({ onClose, filters, onApply, allSports, matches, get
           {allSports.length > 8 && (
             <SearchInput value={sportSearch} onChange={setSportSearch} placeholder="Search sports..." />
           )}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 4, marginBottom: 8 }}>
-            {displayedSports.map(sport => {
-              const col = getSportColors ? getSportColors(sport) : { accent: "#00e5ff", bg: "rgba(0,229,255,0.12)" }
-              return (
-                <SportGridItem
-                  key={sport}
-                  sport={sport}
-                  isSelected={localSports.includes(sport)}
-                  onToggle={toggleSport}
-                  colors={col}
-                />
-              )
-            })}
+          <div className="dark-scrollbar" style={{ maxHeight: 260, overflowY: "auto", marginBottom: 8 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 4 }}>
+              {displayedSports.map(sport => {
+                const col = getSportColors ? getSportColors(sport) : { accent: "#00e5ff", bg: "rgba(0,229,255,0.12)" }
+                return (
+                  <SportGridItem
+                    key={sport}
+                    sport={sport}
+                    isSelected={localSports.includes(sport)}
+                    onToggle={toggleSport}
+                    colors={col}
+                  />
+                )
+              })}
+            </div>
           </div>
           {sportSearch && displayedSports.length === 0 && (
             <div style={{ fontSize: 11, color: "#555", padding: "4px 0" }}>No matches</div>
@@ -415,18 +423,26 @@ export const FilterModal = ({ onClose, filters, onApply, allSports, matches, get
             <div style={{ fontSize: 11, color: "#444", fontStyle: "italic", padding: "4px 0 8px" }}>Select a sport first</div>
           ) : (
             <>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4, marginBottom: 8 }}>
-                {filteredCountries.map(country => (
-                  <CountryGridItem
-                    key={country}
-                    country={country}
-                    flag={getFlag ? getFlag(country) : "🌍"}
-                    isSelected={localCountries.includes(country)}
-                    onToggle={toggleCountry}
-                  />
-                ))}
+              {filteredCountries.length > 6 && (
+                <SearchInput value={countrySearch} onChange={setCountrySearch} placeholder="Search countries..." />
+              )}
+              <div className="dark-scrollbar" style={{ maxHeight: 220, overflowY: "auto", marginBottom: 8 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 4 }}>
+                  {displayedCountries.map(country => (
+                    <CountryGridItem
+                      key={country}
+                      country={country}
+                      flag={getFlag ? getFlag(country) : "🌍"}
+                      isSelected={localCountries.includes(country)}
+                      onToggle={toggleCountry}
+                    />
+                  ))}
+                </div>
               </div>
-              {filteredCountries.length === 0 && (
+              {countrySearch && displayedCountries.length === 0 && (
+                <div style={{ fontSize: 11, color: "#555", padding: "4px 0" }}>No matches</div>
+              )}
+              {!countrySearch && filteredCountries.length === 0 && (
                 <div style={{ fontSize: 11, color: "#555", padding: "4px 0" }}>No countries for selected sports</div>
               )}
             </>
@@ -438,23 +454,23 @@ export const FilterModal = ({ onClose, filters, onApply, allSports, matches, get
             <div style={{ fontSize: 11, color: "#444", fontStyle: "italic", padding: "4px 0 8px" }}>Select a sport first</div>
           ) : (
             <>
-              {filteredEvents.length > 8 && (
-                <SearchInput value={leagueSearch} onChange={setLeagueSearch} placeholder="Search leagues..." />
-              )}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6, marginBottom: 8 }}>
-                {displayedLeagues.map(event => {
-                  const sport = getSportForLeague(event)
-                  const sportCol = sport && getSportColors ? getSportColors(sport) : { accent: "#00e5ff", bg: "rgba(0,229,255,0.15)" }
-                  return (
-                    <LeagueGridItem
-                      key={event}
-                      league={event}
-                      isSelected={localEvents.includes(event)}
-                      onToggle={toggleEvent}
-                      sportColors={{ ...sportCol, sportName: sport ? sport.toLowerCase() : "" }}
-                    />
-                  )
-                })}
+              <SearchInput value={leagueSearch} onChange={setLeagueSearch} placeholder="Search leagues..." />
+              <div className="dark-scrollbar" style={{ maxHeight: 220, overflowY: "auto", marginBottom: 8 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4 }}>
+                  {displayedLeagues.map(event => {
+                    const sport = getSportForLeague(event)
+                    const sportCol = sport && getSportColors ? getSportColors(sport) : { accent: "#00e5ff", bg: "rgba(0,229,255,0.15)" }
+                    return (
+                      <LeagueGridItem
+                        key={event}
+                        league={event}
+                        isSelected={localEvents.includes(event)}
+                        onToggle={toggleEvent}
+                        sportColors={{ ...sportCol, sportName: sport ? sport.toLowerCase() : "" }}
+                      />
+                    )
+                  })}
+                </div>
               </div>
               {leagueSearch && displayedLeagues.length === 0 && (
                 <div style={{ fontSize: 11, color: "#555", padding: "4px 0" }}>No matches</div>

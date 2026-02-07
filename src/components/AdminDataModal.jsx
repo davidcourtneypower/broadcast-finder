@@ -3,7 +3,20 @@ import { Icon } from './Icon'
 import { supabase } from '../config/supabase'
 import { ConfirmModal } from './ConfirmModal'
 
-export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
+export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef }) => {
+  const [isVisible, setIsVisible] = useState(false)
+
+  useEffect(() => {
+    requestAnimationFrame(() => requestAnimationFrame(() => setIsVisible(true)))
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = '' }
+  }, [])
+
+  const handleClose = () => {
+    setIsVisible(false)
+    setTimeout(onClose, 300)
+  }
+
   const [activeTab, setActiveTab] = useState('import')
   const [jsonData, setJsonData] = useState("")
   const [error, setError] = useState("")
@@ -806,16 +819,39 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
     })
   }
 
-  return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.72)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: "#1a1a2e", borderRadius: 16, padding: 20, width: "90%", maxWidth: 600, border: "1px solid #2a2a4a", maxHeight: "85vh", display: "flex", flexDirection: "column" }}>
-        <button onClick={onClose} style={{ position: "absolute", top: 10, right: 10, background: "none", border: "none", color: "#888", cursor: "pointer" }}>
-          <Icon name="x" size={16} />
-        </button>
+  const headerHeight = headerRef?.current?.offsetHeight || 56
 
-        <h3 style={{ color: "#fff", margin: "0 0 16px", fontSize: 16, display: "flex", alignItems: "center", gap: 8 }}>
-          <Icon name="shield" size={16} color="#00e5ff" /> Admin Panel
-        </h3>
+  return (
+    <>
+      <div className={`filter-panel-backdrop ${isVisible ? 'visible' : ''}`} onClick={handleClose} />
+      <div
+        className={`filter-panel ${isVisible ? 'visible' : ''}`}
+        style={{
+          top: headerHeight,
+          maxWidth: 600,
+          width: "95%",
+          margin: "0 auto",
+          background: "#1a1a2e",
+          borderRadius: "0 0 16px 16px",
+          borderTop: "none",
+          border: "1px solid #2a2a4a",
+          borderTopColor: "transparent",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+          maxHeight: `calc(90vh - ${headerHeight}px)`,
+          display: "flex",
+          flexDirection: "column",
+          padding: 20,
+        }}
+      >
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <h3 style={{ color: "#fff", margin: 0, fontSize: 16, display: "flex", alignItems: "center", gap: 8 }}>
+            <Icon name="shield" size={16} color="#00e5ff" /> Admin Panel
+          </h3>
+          <button onClick={handleClose} style={{ background: "none", border: "none", color: "#888", cursor: "pointer", display: "flex" }}>
+            <Icon name="x" size={16} />
+          </button>
+        </div>
 
         {/* Tabs */}
         <div style={{ display: "flex", gap: 4, marginBottom: 16, borderBottom: "1px solid #2a2a4a", paddingBottom: 0 }}>
@@ -855,7 +891,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail }) => {
         </div>
 
         {/* Tab Content */}
-        <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
+        <div className="dark-scrollbar" style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
           {activeTab === 'import' && (
             <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
               <div style={{ fontSize: 11, color: "#888", marginBottom: 12, lineHeight: 1.5 }}>
@@ -1710,6 +1746,6 @@ Example broadcasts:
           </div>
         </div>
       )}
-    </div>
+    </>
   )
 }
