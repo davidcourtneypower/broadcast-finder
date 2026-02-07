@@ -871,6 +871,105 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
     setBanTarget(null)
   }
 
+  // --- Cron job toggle functions ---
+  const CRON_JOB_LABELS = {
+    'fetch-events': 'Fetch Events',
+    'fetch-broadcasts': 'Fetch Broadcasts',
+    'fetch-livestatus': 'Fetch Livestatus',
+    'cleanup-old-data': 'Cleanup Old Data'
+  }
+
+  const loadCronJobs = async () => {
+    try {
+      const { data, error } = await supabase.rpc('get_cron_jobs')
+      if (error) throw error
+      setCronJobs(data || [])
+    } catch (e) {
+      console.error('Error loading cron jobs:', e)
+    }
+  }
+
+  const handleToggleCronJob = async (jobName, currentActive) => {
+    setTogglingJob(jobName)
+    try {
+      const { error } = await supabase.rpc('toggle_cron_job', {
+        job_name: jobName,
+        is_active: !currentActive
+      })
+      if (error) throw error
+      setSuccess(`${CRON_JOB_LABELS[jobName] || jobName} ${!currentActive ? 'enabled' : 'disabled'}`)
+      setTimeout(() => setSuccess(""), 3000)
+      await loadCronJobs()
+    } catch (e) {
+      setError(`Failed to toggle job: ${e.message}`)
+      setTimeout(() => setError(""), 3000)
+    }
+    setTogglingJob(null)
+  }
+
+  // --- Config tab functions ---
+  const CRON_JOB_MAP = {
+    'cron_fetch_events': 'fetch-events',
+    'cron_fetch_broadcasts': 'fetch-broadcasts',
+    'cron_fetch_livestatus': 'fetch-livestatus',
+    'cron_cleanup': 'cleanup-old-data'
+  }
+
+  const loadConfigData = async () => {
+    setLoadingConfig(true)
+    try {
+      const { data, error } = await supabase
+        .from('app_config')
+        .select('*')
+        .order('category')
+        .order('key')
+      if (error) throw error
+      setConfigItems(data || [])
+      setEditedConfig({})
+    } catch (e) {
+      console.error('Error loading config:', e)
+    }
+    setLoadingConfig(false)
+  }
+
+  const handleSaveConfig = async (item) => {
+    const newValue = editedConfig[item.key]
+    if (newValue === undefined || newValue === item.value) return
+
+    setSavingConfig(item.key)
+    setError("")
+    try {
+      const { error } = await supabase
+        .from('app_config')
+        .update({ value: newValue, updated_at: new Date().toISOString() })
+        .eq('key', item.key)
+      if (error) throw error
+
+      // If it's a cron key, also update the pg_cron schedule
+      if (CRON_JOB_MAP[item.key]) {
+        const { error: rpcError } = await supabase.rpc('update_cron_schedule', {
+          job_name: CRON_JOB_MAP[item.key],
+          new_schedule: newValue
+        })
+        if (rpcError) {
+          console.error('Error updating cron schedule:', rpcError)
+          setError(`Config saved but cron schedule update failed: ${rpcError.message}`)
+          setTimeout(() => setError(""), 5000)
+        }
+      }
+
+      setSuccess(`Updated: ${item.label}`)
+      setEditedConfig(prev => { const n = { ...prev }; delete n[item.key]; return n })
+      await loadConfigData()
+      onUpdate()
+      setTimeout(() => setSuccess(""), 3000)
+    } catch (e) {
+      setError('Error saving config: ' + e.message)
+      setTimeout(() => setError(""), 3000)
+    }
+    setSavingConfig(null)
+  }
+
   useEffect(() => {
     // Clear status messages when switching tabs
     setError("")
@@ -1093,105 +1192,6 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
       setError('Error unblocking: ' + e.message)
       setTimeout(() => setError(""), 3000)
     }
-  }
-
-  // --- Cron job toggle functions ---
-  const CRON_JOB_LABELS = {
-    'fetch-events': 'Fetch Events',
-    'fetch-broadcasts': 'Fetch Broadcasts',
-    'fetch-livestatus': 'Fetch Livestatus',
-    'cleanup-old-data': 'Cleanup Old Data'
-  }
-
-  const loadCronJobs = async () => {
-    try {
-      const { data, error } = await supabase.rpc('get_cron_jobs')
-      if (error) throw error
-      setCronJobs(data || [])
-    } catch (e) {
-      console.error('Error loading cron jobs:', e)
-    }
-  }
-
-  const handleToggleCronJob = async (jobName, currentActive) => {
-    setTogglingJob(jobName)
-    try {
-      const { error } = await supabase.rpc('toggle_cron_job', {
-        job_name: jobName,
-        is_active: !currentActive
-      })
-      if (error) throw error
-      setSuccess(`${CRON_JOB_LABELS[jobName] || jobName} ${!currentActive ? 'enabled' : 'disabled'}`)
-      setTimeout(() => setSuccess(""), 3000)
-      await loadCronJobs()
-    } catch (e) {
-      setError(`Failed to toggle job: ${e.message}`)
-      setTimeout(() => setError(""), 3000)
-    }
-    setTogglingJob(null)
-  }
-
-  // --- Config tab functions ---
-  const CRON_JOB_MAP = {
-    'cron_fetch_events': 'fetch-events',
-    'cron_fetch_broadcasts': 'fetch-broadcasts',
-    'cron_fetch_livestatus': 'fetch-livestatus',
-    'cron_cleanup': 'cleanup-old-data'
-  }
-
-  const loadConfigData = async () => {
-    setLoadingConfig(true)
-    try {
-      const { data, error } = await supabase
-        .from('app_config')
-        .select('*')
-        .order('category')
-        .order('key')
-      if (error) throw error
-      setConfigItems(data || [])
-      setEditedConfig({})
-    } catch (e) {
-      console.error('Error loading config:', e)
-    }
-    setLoadingConfig(false)
-  }
-
-  const handleSaveConfig = async (item) => {
-    const newValue = editedConfig[item.key]
-    if (newValue === undefined || newValue === item.value) return
-
-    setSavingConfig(item.key)
-    setError("")
-    try {
-      const { error } = await supabase
-        .from('app_config')
-        .update({ value: newValue, updated_at: new Date().toISOString() })
-        .eq('key', item.key)
-      if (error) throw error
-
-      // If it's a cron key, also update the pg_cron schedule
-      if (CRON_JOB_MAP[item.key]) {
-        const { error: rpcError } = await supabase.rpc('update_cron_schedule', {
-          job_name: CRON_JOB_MAP[item.key],
-          new_schedule: newValue
-        })
-        if (rpcError) {
-          console.error('Error updating cron schedule:', rpcError)
-          setError(`Config saved but cron schedule update failed: ${rpcError.message}`)
-          setTimeout(() => setError(""), 5000)
-        }
-      }
-
-      setSuccess(`Updated: ${item.label}`)
-      setEditedConfig(prev => { const n = { ...prev }; delete n[item.key]; return n })
-      await loadConfigData()
-      onUpdate()
-      setTimeout(() => setSuccess(""), 3000)
-    } catch (e) {
-      setError('Error saving config: ' + e.message)
-      setTimeout(() => setError(""), 3000)
-    }
-    setSavingConfig(null)
   }
 
   const getCategoryLabel = (cat) => {
