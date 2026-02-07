@@ -5,7 +5,7 @@ import { getTodayStr, getTomorrowStr, createStatusMapper } from './utils/helpers
 import { useUserPreferences } from './hooks/useUserPreferences'
 import { DATE_TABS } from './config/constants'
 import { Icon } from './components/Icon'
-import { FixtureCard } from './components/FixtureCard'
+import { EventCard } from './components/EventCard'
 import { FilterModal } from './components/FilterModal'
 import { AuthModal } from './components/AuthModal'
 import { AddBroadcastModal } from './components/AddBroadcastModal'
@@ -31,10 +31,10 @@ function App() {
   const [search, setSearch] = useState("")
   const [matches, setMatches] = useState([])
   const [loading, setLoading] = useState(true)
-  const fixturesPerPage = getConfig('fixtures_per_page', 20)
-  const [displayLimit, setDisplayLimit] = useState(20) // Pagination: overridden by fixturesPerPage from config
+  const eventsPerPage = getConfig('fixtures_per_page', 20)
+  const [displayLimit, setDisplayLimit] = useState(20) // Pagination: overridden by eventsPerPage from config
 
-  const loadMatches = async () => {
+  const loadEvents = async () => {
     setLoading(true)
     try {
       const today = getTodayStr()
@@ -153,11 +153,13 @@ function App() {
               voteStats: votesByBroadcast[b.id] || { up: 0, down: 0, myVote: null }
             }))
 
-          // Map raw API status from DB, with client-side "starting-soon" overlay
+          // Map raw API status from DB, with client-side overlays
           let displayStatus = mapStatus(m.status)
           if (displayStatus === 'upcoming') {
             if (isStartingSoon(m.event_date, m.event_time)) {
               displayStatus = 'starting-soon'
+            } else if (isPastStart(m.event_date, m.event_time) && !m.last_live_update) {
+              displayStatus = 'unknown'
             }
           }
 
@@ -226,7 +228,7 @@ function App() {
       return
     }
 
-    // Check if this country+channel combo is blocked for this fixture
+    // Check if this country+channel combo is blocked for this event
     const { data: blocked } = await supabase
       .from('blocked_broadcasts')
       .select('id')
@@ -250,7 +252,7 @@ function App() {
 
     if (error) {
       if (error.code === '23505') {
-        alert('This broadcast already exists for this fixture.')
+        alert('This broadcast already exists for this event.')
       } else {
         console.error('Error adding broadcast:', error)
       }
@@ -476,17 +478,29 @@ function App() {
 
   useEffect(() => {
     if (!authLoading) {
-      loadMatches()
+      loadEvents()
     }
   }, [user, authLoading])
 
+  // Reload matches when date tab or filters change (fresh broadcast data)
+  const isInitialMount = useRef(true)
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false
+      return
+    }
+    if (!authLoading) {
+      loadEvents()
+    }
+  }, [dateTab, filters])
+
   // Reset pagination when filters, search, or date changes
   useEffect(() => {
-    setDisplayLimit(fixturesPerPage)
-  }, [filters, search, dateTab, fixturesPerPage])
+    setDisplayLimit(eventsPerPage)
+  }, [filters, search, dateTab, eventsPerPage])
 
   // Check if a match is within N minutes of starting (for "starting-soon" overlay)
-  // This is client-side only since the livescore API only reports "NS" before kickoff
+  // This is client-side only since the livestatus API only reports "NS" before kickoff
   const startingSoonMinutes = getConfig('starting_soon_minutes', 15)
   const isStartingSoon = (eventDate, eventTime) => {
     try {
@@ -501,18 +515,33 @@ function App() {
     }
   }
 
-  // Periodically re-evaluate "starting-soon" for upcoming matches
-  // The livescore API only reports "NS" before a match, so starting-soon is client-side
+  // Check if an event's scheduled start time has already passed
+  const isPastStart = (eventDate, eventTime) => {
+    try {
+      let timeStr = eventTime.trim()
+      if (timeStr.split(':').length === 2) timeStr = `${timeStr}:00`
+      const matchDateTime = new Date(`${eventDate}T${timeStr}Z`)
+      if (isNaN(matchDateTime.getTime())) return false
+      return matchDateTime < new Date()
+    } catch {
+      return false
+    }
+  }
+
+  // Periodically re-evaluate client-side statuses (starting-soon, unknown)
   const statusRefreshMs = getConfig('status_refresh_seconds', 60) * 1000
   useEffect(() => {
-    // Re-evaluate immediately when config changes
     const evaluate = () => {
       setMatches(prev => {
         let changed = false
         const updated = prev.map(m => {
-          if (m.status !== 'upcoming' && m.status !== 'starting-soon') return m
-          const startingSoon = isStartingSoon(m.event_date, m.event_time)
-          const newStatus = startingSoon ? 'starting-soon' : 'upcoming'
+          if (m.status !== 'upcoming' && m.status !== 'starting-soon' && m.status !== 'unknown') return m
+          let newStatus = 'upcoming'
+          if (isStartingSoon(m.event_date, m.event_time)) {
+            newStatus = 'starting-soon'
+          } else if (isPastStart(m.event_date, m.event_time) && !m.last_live_update) {
+            newStatus = 'unknown'
+          }
           if (newStatus !== m.status) {
             changed = true
             return { ...m, status: newStatus }
@@ -537,7 +566,7 @@ function App() {
       if (dateTab === "Today" && m.event_date !== todayStr) return false
       if (dateTab === "Tomorrow" && m.event_date !== tomorrowStr) return false
 
-      // Hide finished fixtures from previous days
+      // Hide finished events from previous days
       if (m.event_date < todayStr) return false
 
       if (hasActiveFilters) {
@@ -560,7 +589,7 @@ function App() {
 
     // Always sort by: LIVE → STARTING-SOON → UPCOMING → FINISHED → CANCELLED
     // Within each status, sort by time (most recent live matches first, earliest upcoming matches first)
-    const statusOrder = { live: 0, "starting-soon": 1, upcoming: 2, finished: 3, cancelled: 4 }
+    const statusOrder = { live: 0, "starting-soon": 1, upcoming: 2, unknown: 3, finished: 4, cancelled: 5 }
     result.sort((a, b) => {
       const aStatus = a.status || 'upcoming'
       const bStatus = b.status || 'upcoming'
@@ -606,7 +635,7 @@ function App() {
   const hasMoreMatches = filtered.length > displayLimit
 
   const loadMore = () => {
-    setDisplayLimit(prev => prev + fixturesPerPage)
+    setDisplayLimit(prev => prev + eventsPerPage)
   }
 
   const [blockedBroadcasts, setBlockedBroadcasts] = useState([])
@@ -653,7 +682,7 @@ function App() {
             </div>
             <div>
               <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: -0.3, color: "#fff" }}>SportsOnTV</div>
-              <div style={{ fontSize: 10, color: "#555", fontFamily: "monospace" }}>{liveCount} live · {filtered.length} matches</div>
+              <div style={{ fontSize: 10, color: "#555", fontFamily: "monospace" }}>{liveCount} live · {filtered.length} events</div>
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -769,7 +798,7 @@ function App() {
               }
             `}</style>
             <div style={{ fontSize: 14, fontWeight: 600, color: "#00e5ff", marginBottom: 8 }}>
-              Loading Fixtures
+              Loading Events
             </div>
             <div style={{ fontSize: 12, color: "#666" }}>
               Fetching our data...
@@ -778,16 +807,16 @@ function App() {
         ) : filtered.length === 0 ? (
           <div style={{ textAlign: "center", padding: 40, color: "#444" }}>
             <Icon name="database" size={32} color="#444" style={{ marginBottom: 12, opacity: 0.4 }} />
-            <p style={{ margin: 0, fontSize: 13 }}>No matches found</p>
+            <p style={{ margin: 0, fontSize: 13 }}>No events found</p>
             <p style={{ margin: "8px 0 12px", fontSize: 11, color: "#333" }}>
-              {isAdmin ? "Import matches to get started" : "Check back later"}
+              {isAdmin ? "Import events to get started" : "Check back later"}
             </p>
           </div>
         ) : (
           <>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {displayedMatches.map(m => (
-                <FixtureCard
+                <EventCard
                   key={m.id}
                   match={m}
                   user={user}
@@ -867,7 +896,7 @@ function App() {
       {showAuth && <AuthModal onClose={() => setShowAuth(false)} signInWithGoogle={signInWithGoogle} />}
       {showFilters && <FilterModal onClose={() => setShowFilters(false)} filters={filters} onApply={setFilters} allSports={allSports} matches={matches} getSportColors={getSportColors} getFlag={getFlag} headerRef={headerRef} />}
       {showAddBroadcast && selectedMatch && <AddBroadcastModal onClose={() => setShowAddBroadcast(false)} match={selectedMatch} onAdd={handleAddBroadcast} user={user} countryNames={getCountryNames()} getChannelsForCountry={getChannelsForCountry} getFlag={getFlag} blockedBroadcasts={blockedBroadcasts} />}
-      {showAdminPanel && <AdminDataModal onClose={() => setShowAdminPanel(false)} onUpdate={() => { reloadReferenceData(); loadMatches() }} currentUserEmail={user?.email} headerRef={headerRef} />}
+      {showAdminPanel && <AdminDataModal onClose={() => setShowAdminPanel(false)} onUpdate={() => { reloadReferenceData(); loadEvents() }} currentUserEmail={user?.email} headerRef={headerRef} />}
       {showUserSettings && <UserSettingsModal onClose={() => setShowUserSettings(false)} onSave={handleSettingsSaved} user={user} headerRef={headerRef} />}
     </div>
   )

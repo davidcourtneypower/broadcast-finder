@@ -28,6 +28,7 @@ const STATUS_OPTIONS = [
   { value: 'live', label: 'LIVE', color: '#e53935' },
   { value: 'starting-soon', label: 'STARTING SOON', color: '#7c4dff' },
   { value: 'upcoming', label: 'UPCOMING', color: '#26a69a' },
+  { value: 'unknown', label: 'UNKNOWN', color: '#ff9800' },
   { value: 'finished', label: 'FINISHED', color: '#666' }
 ]
 

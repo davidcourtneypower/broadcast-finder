@@ -75,7 +75,7 @@ export const AddBroadcastModal = ({ onClose, match, onAdd, user, countryNames, g
                   ? `All channels for ${selectedCountry} have been blocked by community votes.`
                   : blockedCount > 0
                     ? `All channels for ${selectedCountry} have been added or blocked.`
-                    : `All channels for ${selectedCountry} have already been added to this fixture.`
+                    : `All channels for ${selectedCountry} have already been added to this event.`
                 }
               </div>
             ) : (

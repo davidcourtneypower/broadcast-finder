@@ -22,23 +22,23 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
   const [importing, setImporting] = useState(false)
-  const [fetchingFixtures, setFetchingFixtures] = useState(false)
+  const [fetchingEvents, setFetchingEvents] = useState(false)
   const [fetchingBroadcasts, setFetchingBroadcasts] = useState(false)
-  const [fetchingLivescores, setFetchingLivescores] = useState(false)
-  const [livescoreResult, setLivescoreResult] = useState(null)
+  const [fetchingLivestatus, setFetchingLivestatus] = useState(false)
+  const [livestatusResult, setLivestatusResult] = useState(null)
   const [selectedDates, setSelectedDates] = useState(['today', 'tomorrow'])
   const [logs, setLogs] = useState([])
   const [loadingLogs, setLoadingLogs] = useState(false)
-  const [fetchResult, setFetchResult] = useState(null)
+  const [eventsResult, setEventsResult] = useState(null)
   const [broadcastResult, setBroadcastResult] = useState(null)
-  const [fixtures, setFixtures] = useState([])
-  const [loadingFixtures, setLoadingFixtures] = useState(false)
-  const [selectedFixtures, setSelectedFixtures] = useState([])
-  const [deletingFixtures, setDeletingFixtures] = useState(false)
-  const [showDeleteFixturesConfirm, setShowDeleteFixturesConfirm] = useState(false)
-  const [searchFixture, setSearchFixture] = useState("")
+  const [adminEvents, setAdminEvents] = useState([])
+  const [loadingAdminEvents, setLoadingAdminEvents] = useState(false)
+  const [selectedEvents, setSelectedEvents] = useState([])
+  const [deletingEvents, setDeletingEvents] = useState(false)
+  const [showDeleteEventsConfirm, setShowDeleteEventsConfirm] = useState(false)
+  const [searchEvent, setSearchEvent] = useState("")
   const [sportFilter, setSportFilter] = useState("all")
-  const [expandedFixture, setExpandedFixture] = useState(null)
+  const [expandedEvent, setExpandedEvent] = useState(null)
   const [users, setUsers] = useState([])
   const [loadingUsers, setLoadingUsers] = useState(false)
   const [bannedUsers, setBannedUsers] = useState([])
@@ -49,10 +49,12 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
   const [banAction, setBanAction] = useState("ban") // "ban" or "unban"
   const [searchUser, setSearchUser] = useState("")
   const [logTypeFilter, setLogTypeFilter] = useState("all")
-  const [importType, setImportType] = useState(null) // 'fixtures', 'broadcasts', 'livescores', or null (user-selected)
+  const [importType, setImportType] = useState(null) // 'events', 'broadcasts', 'livestatus', or null (user-selected)
   const [importPreview, setImportPreview] = useState(null)
   const [cleaningUp, setCleaningUp] = useState(false)
   const [cleanupResult, setCleanupResult] = useState(null)
+  const [fetchingReferenceData, setFetchingReferenceData] = useState(false)
+  const [referenceDataResult, setReferenceDataResult] = useState(null)
   const [showScrollHint, setShowScrollHint] = useState(false)
   const [statusMappings, setStatusMappings] = useState([])
   const [loadingStatuses, setLoadingStatuses] = useState(false)
@@ -93,7 +95,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
     try {
       const parsed = JSON.parse(jsonString)
 
-      if (type === 'fixtures' && parsed.events && Array.isArray(parsed.events)) {
+      if (type === 'events' && parsed.events && Array.isArray(parsed.events)) {
         setImportPreview({
           count: parsed.events.length,
           sample: parsed.events.slice(0, 3).map(e => ({
@@ -117,7 +119,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
         return
       }
 
-      if (type === 'livescores' && parsed.events && Array.isArray(parsed.events)) {
+      if (type === 'livestatus' && parsed.events && Array.isArray(parsed.events)) {
         setImportPreview({
           count: parsed.events.length,
           sample: parsed.events.slice(0, 3).map(e => ({
@@ -169,8 +171,8 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
     try {
       const parsed = JSON.parse(jsonData)
 
-      // Fixtures import
-      if (importType === 'fixtures') {
+      // Events import
+      if (importType === 'events') {
         if (!parsed.events || !Array.isArray(parsed.events)) {
           setError('Expected { "events": [...] } format for events import.')
           setImporting(false)
@@ -217,7 +219,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
         } else {
           const sports = uniqueSports
           setSuccess(`Imported ${rows.length} events across ${sports.length} sport(s)!`)
-          await logAdminAction('fixtures_imported', {
+          await logAdminAction('events_imported', {
             extraData: { count: rows.length, sports, source: 'thesportsdb_json' }
           })
           setTimeout(() => { onUpdate() }, 1500)
@@ -314,10 +316,10 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
         return
       }
 
-      // Livescores import
-      if (importType === 'livescores') {
+      // Live status import
+      if (importType === 'livestatus') {
         if (!parsed.events || !Array.isArray(parsed.events)) {
-          setError('Expected { "events": [...] } format for livescores import.')
+          setError('Expected { "events": [...] } format for live status import.')
           setImporting(false)
           return
         }
@@ -358,8 +360,8 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
         } else if (updated === 0 && notFound > 0) {
           setError(`No matching events found for ${notFound} events. Import events first.`)
         } else {
-          setSuccess(`Updated ${updated} match score(s)${notFound > 0 ? `, ${notFound} not found` : ''}`)
-          await logAdminAction('livescores_imported', {
+          setSuccess(`Updated ${updated} event score(s)${notFound > 0 ? `, ${notFound} not found` : ''}`)
+          await logAdminAction('livestatus_imported', {
             extraData: { updated, notFound, source: 'thesportsdb_json' }
           })
           setTimeout(() => { onUpdate() }, 1500)
@@ -375,42 +377,30 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
     setImporting(false)
   }
 
-  const handleFetchFixtures = async () => {
-    setFetchingFixtures(true)
+  const handleFetchEvents = async () => {
+    setFetchingEvents(true)
     setError("")
     setSuccess("")
-    setFetchResult(null)
+    setEventsResult(null)
 
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const token = session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-
-      const response = await fetch(`${supabaseUrl}/functions/v1/fetch-events`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          dates: selectedDates,
-          trigger: 'manual'
-        })
+      const { data, error: fnError } = await supabase.functions.invoke('fetch-events', {
+        body: { dates: selectedDates, trigger: 'manual' }
       })
 
-      const result = await response.json()
-      setFetchResult(result)
+      if (fnError) throw fnError
+      setEventsResult(data)
 
-      if (result.success || result.status === 'partial') {
-        setSuccess(`Fetched ${result.eventsFound} events across ${result.sportsFound} sports!`)
+      if (data.success || data.status === 'partial') {
+        setSuccess(`Fetched ${data.eventsFound} events across ${data.sportsFound} sports!`)
         setTimeout(() => { onUpdate() }, 1000)
       } else {
-        setError("Fetch failed: " + (result.error || 'Unknown error'))
+        setError("Fetch failed: " + (data.error || 'Unknown error'))
       }
     } catch (e) {
       setError("Error: " + e.message)
     }
-    setFetchingFixtures(false)
+    setFetchingEvents(false)
   }
 
   const handleFetchBroadcasts = async () => {
@@ -420,29 +410,17 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
     setBroadcastResult(null)
 
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const token = session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-
-      const response = await fetch(`${supabaseUrl}/functions/v1/fetch-broadcasts`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          dates: selectedDates,
-          trigger: 'manual'
-        })
+      const { data, error: fnError } = await supabase.functions.invoke('fetch-broadcasts', {
+        body: { dates: selectedDates, trigger: 'manual' }
       })
 
-      const result = await response.json()
-      setBroadcastResult(result)
+      if (fnError) throw fnError
+      setBroadcastResult(data)
 
-      if (result.success || result.status === 'partial') {
+      if (data.success || data.status === 'partial') {
         setTimeout(() => { onUpdate() }, 1000)
       } else {
-        setError("Broadcast fetch failed: " + (result.error || 'Unknown error'))
+        setError("Broadcast fetch failed: " + (data.error || 'Unknown error'))
       }
     } catch (e) {
       setError("Error: " + e.message)
@@ -457,24 +435,15 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
     setCleanupResult(null)
 
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const token = session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-
-      const response = await fetch(`${supabaseUrl}/functions/v1/cleanup-old-data`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({})
+      const { data, error: fnError } = await supabase.functions.invoke('cleanup-old-data', {
+        body: {}
       })
 
-      const result = await response.json()
-      setCleanupResult(result)
+      if (fnError) throw fnError
+      setCleanupResult(data)
 
-      if (result.success) {
-        const { matches, broadcasts, votes } = result.deleted
+      if (data.success) {
+        const { matches, broadcasts, votes } = data.deleted
         if (matches === 0) {
           setSuccess('No old data to clean up')
         } else {
@@ -482,7 +451,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
           setTimeout(() => { onUpdate() }, 1000)
         }
       } else {
-        setError('Cleanup failed: ' + (result.error || 'Unknown error'))
+        setError('Cleanup failed: ' + (data.error || 'Unknown error'))
       }
     } catch (e) {
       setError('Error: ' + e.message)
@@ -490,39 +459,56 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
     setCleaningUp(false)
   }
 
-  const handleFetchLivescores = async () => {
-    setFetchingLivescores(true)
+  const handleFetchLivestatus = async () => {
+    setFetchingLivestatus(true)
     setError("")
     setSuccess("")
-    setLivescoreResult(null)
+    setLivestatusResult(null)
 
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const token = session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-
-      const response = await fetch(`${supabaseUrl}/functions/v1/fetch-livestatus`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ trigger: 'manual' })
+      const { data, error: fnError } = await supabase.functions.invoke('fetch-livestatus', {
+        body: { trigger: 'manual' }
       })
 
-      const result = await response.json()
-      setLivescoreResult(result)
+      if (fnError) throw fnError
+      setLivestatusResult(data)
 
-      if (result.success) {
-        setSuccess(`Livescores: ${result.updated} updated, ${result.disappearedFinished || 0} finished`)
+      if (data.success) {
+        setSuccess(`Live status: ${data.updated} updated, ${data.disappearedFinished || 0} finished`)
         setTimeout(() => { onUpdate() }, 1000)
       } else {
-        setError('Livescore fetch failed: ' + (result.error || 'Unknown error'))
+        setError('Live status fetch failed: ' + (data.error || 'Unknown error'))
       }
     } catch (e) {
       setError('Error: ' + e.message)
     }
-    setFetchingLivescores(false)
+    setFetchingLivestatus(false)
+  }
+
+  const handleFetchReferenceData = async () => {
+    setFetchingReferenceData(true)
+    setError("")
+    setSuccess("")
+    setReferenceDataResult(null)
+
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke('fetch-reference-data', {
+        body: { trigger: 'manual' }
+      })
+
+      if (fnError) throw fnError
+      setReferenceDataResult(data)
+
+      if (data.success || data.status === 'partial') {
+        setSuccess(`Reference data: ${data.sports?.upserted || 0} sports, ${data.countries?.upserted || 0} countries, ${data.leagues?.upserted || 0} leagues`)
+        setTimeout(() => { onUpdate() }, 1000)
+      } else {
+        setError('Reference data fetch failed: ' + (data.error || 'Unknown error'))
+      }
+    } catch (e) {
+      setError('Error: ' + e.message)
+    }
+    setFetchingReferenceData(false)
   }
 
   const loadLogs = async () => {
@@ -589,11 +575,11 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
     setLoadingLogs(false)
   }
 
-  const loadFixtures = async () => {
-    setLoadingFixtures(true)
+  const loadAdminEvents = async () => {
+    setLoadingAdminEvents(true)
     try {
-      // Fetch all fixtures with their broadcasts using pagination
-      let allFixtures = []
+      // Fetch all events with their broadcasts using pagination
+      let allEvents = []
       const PAGE_SIZE = 1000
       let from = 0
       while (true) {
@@ -617,90 +603,90 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
         if (error) throw error
         // Flatten sport join into sport_name for downstream use
         const flattened = (data || []).map(f => ({ ...f, sport_name: f.sport?.name || 'Unknown' }))
-        allFixtures = allFixtures.concat(flattened)
+        allEvents = allEvents.concat(flattened)
         if (!data || data.length < PAGE_SIZE) break
         from += PAGE_SIZE
       }
-      setFixtures(allFixtures)
+      setAdminEvents(allEvents)
     } catch (e) {
-      console.error('Error loading fixtures:', e)
+      console.error('Error loading events:', e)
     }
-    setLoadingFixtures(false)
+    setLoadingAdminEvents(false)
   }
 
-  const toggleFixtureExpand = (fixtureId) => {
-    setExpandedFixture(prev => prev === fixtureId ? null : fixtureId)
+  const toggleEventExpand = (eventId) => {
+    setExpandedEvent(prev => prev === eventId ? null : eventId)
   }
 
-  const toggleFixtureSelection = (fixtureId) => {
-    setSelectedFixtures(prev =>
-      prev.includes(fixtureId)
-        ? prev.filter(id => id !== fixtureId)
-        : [...prev, fixtureId]
+  const toggleEventSelection = (eventId) => {
+    setSelectedEvents(prev =>
+      prev.includes(eventId)
+        ? prev.filter(id => id !== eventId)
+        : [...prev, eventId]
     )
   }
 
-  const toggleSelectAllFixtures = () => {
-    const filteredFixtures = getFilteredFixtures()
-    if (selectedFixtures.length === filteredFixtures.length) {
-      setSelectedFixtures([])
+  const toggleSelectAllEvents = () => {
+    const filteredEvents = getFilteredEvents()
+    if (selectedEvents.length === filteredEvents.length) {
+      setSelectedEvents([])
     } else {
-      setSelectedFixtures(filteredFixtures.map(f => f.id))
+      setSelectedEvents(filteredEvents.map(f => f.id))
     }
   }
 
-  const confirmBulkDeleteFixtures = () => {
-    if (selectedFixtures.length === 0) return
-    setShowDeleteFixturesConfirm(true)
+  const confirmBulkDeleteEvents = () => {
+    if (selectedEvents.length === 0) return
+    setShowDeleteEventsConfirm(true)
   }
 
-  const handleBulkDeleteFixtures = async () => {
-    if (selectedFixtures.length === 0) return
+  const handleBulkDeleteEvents = async () => {
+    if (selectedEvents.length === 0) return
 
-    setDeletingFixtures(true)
+    setDeletingEvents(true)
     try {
-      // Delete fixtures - broadcasts and votes will cascade delete
+      // Delete events - broadcasts and votes will cascade delete
       const { error } = await supabase
         .from('events')
         .delete()
-        .in('id', selectedFixtures)
+        .in('id', selectedEvents)
 
       if (error) throw error
 
       // Log the bulk deletion
-      await logAdminAction('fixtures_deleted', {
+      await logAdminAction('events_deleted', {
         extraData: {
-          deleted_count: selectedFixtures.length,
-          fixture_ids: selectedFixtures.slice(0, 10) // Log first 10 for reference
+          deleted_count: selectedEvents.length,
+          event_ids: selectedEvents.slice(0, 10) // Log first 10 for reference
         }
       })
 
-      setSuccess(`Successfully deleted ${selectedFixtures.length} event${selectedFixtures.length > 1 ? 's' : ''} (and associated broadcasts/votes)`)
-      setSelectedFixtures([])
-      await loadFixtures()
+      setSuccess(`Successfully deleted ${selectedEvents.length} event${selectedEvents.length > 1 ? 's' : ''} (and associated broadcasts/votes)`)
+      setSelectedEvents([])
+      await loadAdminEvents()
       onUpdate()
       setTimeout(() => setSuccess(""), 3000)
     } catch (e) {
       setError('Error deleting events: ' + e.message)
       setTimeout(() => setError(""), 3000)
     }
-    setDeletingFixtures(false)
-    setShowDeleteFixturesConfirm(false)
+    setDeletingEvents(false)
+    setShowDeleteEventsConfirm(false)
   }
 
-  const getFilteredFixtures = () => {
-    return fixtures.filter(fixture => {
+  const getFilteredEvents = () => {
+    return adminEvents.filter(evt => {
       // Sport filter
-      if (sportFilter !== "all" && fixture.sport_name !== sportFilter) {
+      if (sportFilter !== "all" && evt.sport_name !== sportFilter) {
         return false
       }
 
       // Search filter
-      if (searchFixture) {
-        const searchTerm = searchFixture.toLowerCase()
-        const teams = `${fixture.home || ''} ${fixture.away || ''} ${fixture.event_name || ''}`.toLowerCase()
-        const league = (fixture.league || '').toLowerCase()
-        const sport = (fixture.sport_name || '').toLowerCase()
+      if (searchEvent) {
+        const searchTerm = searchEvent.toLowerCase()
+        const teams = `${evt.home || ''} ${evt.away || ''} ${evt.event_name || ''}`.toLowerCase()
+        const league = (evt.league || '').toLowerCase()
+        const sport = (evt.sport_name || '').toLowerCase()
 
         if (!teams.includes(searchTerm) && !league.includes(searchTerm) && !sport.includes(searchTerm)) {
           return false
@@ -712,7 +698,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
   }
 
   const getUniqueSports = () => {
-    return [...new Set(fixtures.map(f => f.sport_name))].sort()
+    return [...new Set(adminEvents.map(f => f.sport_name))].sort()
   }
 
   const loadUsers = async () => {
@@ -976,13 +962,13 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
     // Clear status messages when switching tabs
     setError("")
     setSuccess("")
-    setFetchResult(null)
+    setEventsResult(null)
     setBroadcastResult(null)
     setCleanupResult(null)
     setImportType(null)
     setImportPreview(null)
     setJsonData("")
-    setSelectedFixtures([])
+    setSelectedEvents([])
 
     // Load data for specific tabs
     if (activeTab === 'fetch') {
@@ -991,8 +977,8 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
       loadLogs()
     } else if (activeTab === 'users') {
       loadUsers()
-    } else if (activeTab === 'fixtures') {
-      loadFixtures()
+    } else if (activeTab === 'events') {
+      loadAdminEvents()
     } else if (activeTab === 'status') {
       loadStatusMappings()
     } else if (activeTab === 'channels') {
@@ -1005,7 +991,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
   // Re-check scroll indicator when tab or data changes
   useEffect(() => {
     requestAnimationFrame(checkScroll)
-  }, [activeTab, fixtures, users, logs, statusMappings, countries, channels, blockedBroadcasts, configItems, cronJobs, checkScroll])
+  }, [activeTab, adminEvents, users, logs, statusMappings, countries, channels, blockedBroadcasts, configItems, cronJobs, checkScroll])
 
   const toggleDate = (date) => {
     setSelectedDates(prev =>
@@ -1261,7 +1247,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
           {[
             { id: 'import', label: 'Import' },
             { id: 'fetch', label: 'Manage' },
-            { id: 'fixtures', label: 'Events' },
+            { id: 'events', label: 'Events' },
             { id: 'status', label: 'Statuses' },
             { id: 'channels', label: 'Channels' },
             { id: 'config', label: 'Config' },
@@ -1307,9 +1293,9 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
               {/* Import type selector */}
               <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
                 {[
-                  { key: 'fixtures', label: 'Events', color: '#00e5ff', icon: 'calendar', desc: '{ events: [...] }' },
+                  { key: 'events', label: 'Events', color: '#00e5ff', icon: 'calendar', desc: '{ events: [...] }' },
                   { key: 'broadcasts', label: 'Broadcasts', color: '#ff9f1c', icon: 'tv', desc: '{ tvevents: [...] }' },
-                  { key: 'livescores', label: 'Livescores', color: '#4caf50', icon: 'clock', desc: '{ events: [...] }' },
+                  { key: 'livestatus', label: 'Live Status', color: '#4caf50', icon: 'clock', desc: '{ events: [...] }' },
                 ].map(opt => {
                   const active = importType === opt.key
                   return (
@@ -1361,9 +1347,9 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
                       previewImportData(e.target.value, importType)
                     }}
                     placeholder={
-                      importType === 'fixtures' ? 'Paste TheSportsDB eventsday.php response...\n\n{ "events": [{ "idEvent": "123", "strSport": "Soccer", ... }] }' :
+                      importType === 'events' ? 'Paste TheSportsDB eventsday.php response...\n\n{ "events": [{ "idEvent": "123", "strSport": "Soccer", ... }] }' :
                       importType === 'broadcasts' ? 'Paste TheSportsDB eventstv.php response...\n\n{ "tvevents": [{ "idEvent": "123", "strTVStation": "ESPN", ... }] }' :
-                      'Paste TheSportsDB livescores response...\n\n{ "events": [{ "idEvent": "123", "strStatus": "1H", "intHomeScore": "1", ... }] }'
+                      'Paste TheSportsDB live status response...\n\n{ "events": [{ "idEvent": "123", "strStatus": "1H", "intHomeScore": "1", ... }] }'
                     }
                     style={{
                       flex: 1,
@@ -1386,8 +1372,8 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
                     <div style={{
                       padding: 10,
                       marginBottom: 12,
-                      background: importType === 'fixtures' ? "rgba(0,229,255,0.08)" : importType === 'broadcasts' ? "rgba(255,159,28,0.08)" : importType === 'livescores' ? "rgba(76,175,80,0.08)" : "rgba(255,255,255,0.04)",
-                      border: `1px solid ${importType === 'fixtures' ? "rgba(0,229,255,0.3)" : importType === 'broadcasts' ? "rgba(255,159,28,0.3)" : importType === 'livescores' ? "rgba(76,175,80,0.3)" : "#2a2a4a"}`,
+                      background: importType === 'events' ? "rgba(0,229,255,0.08)" : importType === 'broadcasts' ? "rgba(255,159,28,0.08)" : importType === 'livestatus' ? "rgba(76,175,80,0.08)" : "rgba(255,255,255,0.04)",
+                      border: `1px solid ${importType === 'events' ? "rgba(0,229,255,0.3)" : importType === 'broadcasts' ? "rgba(255,159,28,0.3)" : importType === 'livestatus' ? "rgba(76,175,80,0.3)" : "#2a2a4a"}`,
                       borderRadius: 8
                     }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
@@ -1398,9 +1384,9 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
                       <div style={{ fontSize: 10, color: "#888", lineHeight: 1.5, fontFamily: "monospace" }}>
                         {importPreview.sample.map((item, i) => (
                           <div key={i} style={{ marginBottom: 2 }}>
-                            {importType === 'fixtures' && `• ${item.sport}: ${item.event} (${item.date})`}
+                            {importType === 'events' && `• ${item.sport}: ${item.event} (${item.date})`}
                             {importType === 'broadcasts' && `• ${item.event} → ${item.channel} (${item.country})`}
-                            {importType === 'livescores' && `• ${item.event} [${item.status}] ${item.score}`}
+                            {importType === 'livestatus' && `• ${item.event} [${item.status}] ${item.score}`}
                           </div>
                         ))}
                         {importPreview.count > 3 && <div style={{ color: "#555" }}>...and {importPreview.count - 3} more</div>}
@@ -1410,9 +1396,9 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
                           Note: Broadcasts will be linked to events by event ID. Import events first if needed.
                         </div>
                       )}
-                      {importType === 'livescores' && (
+                      {importType === 'livestatus' && (
                         <div style={{ fontSize: 9, color: "#4caf50", marginTop: 6, fontStyle: "italic" }}>
-                          This will update match statuses and scores for existing events.
+                          This will update statuses and scores for existing events.
                         </div>
                       )}
                     </div>
@@ -1421,7 +1407,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
                   {error && <div style={{ padding: 8, marginBottom: 12, background: "rgba(244,67,54,0.15)", border: "1px solid rgba(244,67,54,0.3)", borderRadius: 6, color: "#e57373", fontSize: 11 }}>{error}</div>}
                   {success && <div style={{ padding: 8, marginBottom: 12, background: "rgba(76,175,80,0.15)", border: "1px solid rgba(76,175,80,0.3)", borderRadius: 6, color: "#81c784", fontSize: 11 }}>{success}</div>}
                   <button onClick={handleImport} disabled={!jsonData.trim() || importing} style={{ width: "100%", padding: "10px 0", borderRadius: 8, border: "none", background: jsonData.trim() && !importing ? "linear-gradient(135deg,#00e5ff,#7c4dff)" : "#2a2a4a", color: "#fff", fontSize: 14, fontWeight: 600, cursor: jsonData.trim() && !importing ? "pointer" : "not-allowed" }}>
-                    {importing ? "Importing..." : importType === 'fixtures' ? 'Import Events' : importType === 'broadcasts' ? 'Import Broadcasts' : importType === 'livescores' ? 'Import Livescores' : 'Import'}
+                    {importing ? "Importing..." : importType === 'events' ? 'Import Events' : importType === 'broadcasts' ? 'Import Broadcasts' : importType === 'livestatus' ? 'Import Live Status' : 'Import'}
                   </button>
                 </>
               )}
@@ -1534,34 +1520,34 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
               {error && <div style={{ padding: 8, background: "rgba(244,67,54,0.15)", border: "1px solid rgba(244,67,54,0.3)", borderRadius: 6, color: "#e57373", fontSize: 11 }}>{error}</div>}
               {success && <div style={{ padding: 8, background: "rgba(76,175,80,0.15)", border: "1px solid rgba(76,175,80,0.3)", borderRadius: 6, color: "#81c784", fontSize: 11 }}>{success}</div>}
 
-              {/* Fetch Fixtures */}
+              {/* Fetch Events */}
               <div>
                 <div style={{ fontSize: 11, color: "#888", marginBottom: 8 }}>
                   Fetch all sports events from TheSportsDB for selected dates.
                 </div>
                 <button
-                  onClick={handleFetchFixtures}
-                  disabled={selectedDates.length === 0 || fetchingFixtures}
+                  onClick={handleFetchEvents}
+                  disabled={selectedDates.length === 0 || fetchingEvents}
                   style={{
                     width: "100%",
                     padding: "10px 0",
                     borderRadius: 8,
                     border: "none",
-                    background: selectedDates.length > 0 && !fetchingFixtures ? "linear-gradient(135deg,#00e5ff,#7c4dff)" : "#2a2a4a",
+                    background: selectedDates.length > 0 && !fetchingEvents ? "linear-gradient(135deg,#00e5ff,#7c4dff)" : "#2a2a4a",
                     color: "#fff",
                     fontSize: 13,
                     fontWeight: 600,
-                    cursor: selectedDates.length > 0 && !fetchingFixtures ? "pointer" : "not-allowed"
+                    cursor: selectedDates.length > 0 && !fetchingEvents ? "pointer" : "not-allowed"
                   }}
                 >
-                  {fetchingFixtures ? "Fetching..." : "Fetch Events"}
+                  {fetchingEvents ? "Fetching..." : "Fetch Events"}
                 </button>
               </div>
 
               {/* Fetch Broadcasts */}
               <div>
                 <div style={{ fontSize: 11, color: "#888", marginBottom: 8 }}>
-                  Fetch TV broadcast data and link to existing fixtures.
+                  Fetch TV broadcast data and link to existing events.
                 </div>
                 <button
                   onClick={handleFetchBroadcasts}
@@ -1582,34 +1568,58 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
                 </button>
               </div>
 
-              {/* Fetch Livescores */}
+              {/* Fetch Live Status */}
               <div>
                 <div style={{ fontSize: 11, color: "#888", marginBottom: 8 }}>
-                  Fetch live match scores and update statuses in real-time.
+                  Fetch live scores and update statuses in real-time.
                 </div>
                 <button
-                  onClick={handleFetchLivescores}
-                  disabled={fetchingLivescores}
+                  onClick={handleFetchLivestatus}
+                  disabled={fetchingLivestatus}
                   style={{
                     width: "100%",
                     padding: "10px 0",
                     borderRadius: 8,
                     border: "none",
-                    background: !fetchingLivescores ? "linear-gradient(135deg,#4caf50,#2e7d32)" : "#2a2a4a",
+                    background: !fetchingLivestatus ? "linear-gradient(135deg,#4caf50,#2e7d32)" : "#2a2a4a",
                     color: "#fff",
                     fontSize: 13,
                     fontWeight: 600,
-                    cursor: !fetchingLivescores ? "pointer" : "not-allowed"
+                    cursor: !fetchingLivestatus ? "pointer" : "not-allowed"
                   }}
                 >
-                  {fetchingLivescores ? "Fetching..." : "Fetch Livescores"}
+                  {fetchingLivestatus ? "Fetching..." : "Fetch Live Status"}
+                </button>
+              </div>
+
+              {/* Fetch Reference Data */}
+              <div>
+                <div style={{ fontSize: 11, color: "#888", marginBottom: 8 }}>
+                  Fetch all sports, countries, and leagues from TheSportsDB.
+                </div>
+                <button
+                  onClick={handleFetchReferenceData}
+                  disabled={fetchingReferenceData}
+                  style={{
+                    width: "100%",
+                    padding: "10px 0",
+                    borderRadius: 8,
+                    border: "none",
+                    background: !fetchingReferenceData ? "linear-gradient(135deg,#ab47bc,#7b1fa2)" : "#2a2a4a",
+                    color: "#fff",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: !fetchingReferenceData ? "pointer" : "not-allowed"
+                  }}
+                >
+                  {fetchingReferenceData ? "Fetching..." : "Fetch Reference Data"}
                 </button>
               </div>
 
               {/* Cleanup section */}
               <div>
                 <div style={{ fontSize: 11, color: "#888", marginBottom: 10, lineHeight: 1.5 }}>
-                  Remove all fixtures, broadcasts, and votes for past matches (before today).
+                  Remove all events, broadcasts, and votes for past events (before today).
                 </div>
                 <button
                   onClick={handleCleanup}
@@ -1631,13 +1641,13 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
               </div>
 
               {/* Combined results area - below all actions */}
-              {(fetchResult || broadcastResult || livescoreResult || (cleanupResult && cleanupResult.success && cleanupResult.deleted?.matches > 0)) && (
+              {(eventsResult || broadcastResult || livestatusResult || referenceDataResult || (cleanupResult && cleanupResult.success && cleanupResult.deleted?.matches > 0)) && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {fetchResult && (
+                  {eventsResult && (
                     <div style={{
                       padding: 10,
-                      background: getStatusBg(fetchResult.status),
-                      border: `1px solid ${getStatusBorder(fetchResult.status)}`,
+                      background: getStatusBg(eventsResult.status),
+                      border: `1px solid ${getStatusBorder(eventsResult.status)}`,
                       borderRadius: 6,
                       display: "flex",
                       alignItems: "center",
@@ -1645,7 +1655,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
                     }}>
                       <Icon name="calendar" size={12} color="#00e5ff" />
                       <div style={{ fontSize: 11, color: "#aaa", lineHeight: 1.4 }}>
-                        Found {fetchResult.eventsFound} events across {fetchResult.sportsFound} sports, inserted {fetchResult.eventsInserted}
+                        Found {eventsResult.eventsFound} events across {eventsResult.sportsFound} sports, inserted {eventsResult.eventsInserted}
                       </div>
                     </div>
                   )}
@@ -1666,11 +1676,11 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
                       </div>
                     </div>
                   )}
-                  {livescoreResult && (
+                  {livestatusResult && (
                     <div style={{
                       padding: 10,
-                      background: getStatusBg(livescoreResult.status),
-                      border: `1px solid ${getStatusBorder(livescoreResult.status)}`,
+                      background: getStatusBg(livestatusResult.status),
+                      border: `1px solid ${getStatusBorder(livestatusResult.status)}`,
                       borderRadius: 6,
                       display: "flex",
                       alignItems: "center",
@@ -1678,9 +1688,25 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
                     }}>
                       <Icon name="clock" size={12} color="#4caf50" />
                       <div style={{ fontSize: 11, color: "#aaa", lineHeight: 1.4 }}>
-                        Processed {livescoreResult.livescoreEvents} events, updated {livescoreResult.updated}
-                        {livescoreResult.disappearedFinished > 0 && `, ${livescoreResult.disappearedFinished} marked finished`}
-                        {livescoreResult.errors?.length > 0 && `, ${livescoreResult.errors.length} errors`}
+                        Processed {livestatusResult.totalEvents} events, updated {livestatusResult.updated}
+                        {livestatusResult.disappearedFinished > 0 && `, ${livestatusResult.disappearedFinished} marked finished`}
+                        {livestatusResult.errors?.length > 0 && `, ${livestatusResult.errors.length} errors`}
+                      </div>
+                    </div>
+                  )}
+                  {referenceDataResult && (
+                    <div style={{
+                      padding: 10,
+                      background: getStatusBg(referenceDataResult.status),
+                      border: `1px solid ${getStatusBorder(referenceDataResult.status)}`,
+                      borderRadius: 6,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                    }}>
+                      <Icon name="database" size={12} color="#ab47bc" />
+                      <div style={{ fontSize: 11, color: "#aaa", lineHeight: 1.4 }}>
+                        Sports: {referenceDataResult.sports?.upserted || 0}, Countries: {referenceDataResult.countries?.upserted || 0}, Leagues: {referenceDataResult.leagues?.upserted || 0}
                       </div>
                     </div>
                   )}
@@ -1705,19 +1731,19 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
             </div>
           )}
 
-          {activeTab === 'fixtures' && (
+          {activeTab === 'events' && (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 8 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div style={{ fontSize: 11, color: "#888" }}>
-                    {fixtures.length} fixture{fixtures.length !== 1 ? 's' : ''} total
-                    {selectedFixtures.length > 0 && ` • ${selectedFixtures.length} selected`}
+                    {adminEvents.length} event{adminEvents.length !== 1 ? 's' : ''} total
+                    {selectedEvents.length > 0 && ` • ${selectedEvents.length} selected`}
                   </div>
                   <div style={{ display: "flex", gap: 6 }}>
-                    {selectedFixtures.length > 0 && (
+                    {selectedEvents.length > 0 && (
                       <button
-                        onClick={confirmBulkDeleteFixtures}
-                        disabled={deletingFixtures}
+                        onClick={confirmBulkDeleteEvents}
+                        disabled={deletingEvents}
                         style={{
                           padding: "4px 10px",
                           borderRadius: 6,
@@ -1725,7 +1751,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
                           background: "rgba(244,67,54,0.15)",
                           color: "#e57373",
                           fontSize: 10,
-                          cursor: deletingFixtures ? "not-allowed" : "pointer",
+                          cursor: deletingEvents ? "not-allowed" : "pointer",
                           display: "flex",
                           alignItems: "center",
                           gap: 4,
@@ -1733,12 +1759,12 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
                         }}
                       >
                         <Icon name="x" size={10} />
-                        {deletingFixtures ? "Deleting..." : `Delete (${selectedFixtures.length})`}
+                        {deletingEvents ? "Deleting..." : `Delete (${selectedEvents.length})`}
                       </button>
                     )}
                     <button
-                      onClick={loadFixtures}
-                      disabled={loadingFixtures}
+                      onClick={loadAdminEvents}
+                      disabled={loadingAdminEvents}
                       style={{
                         padding: "4px 10px",
                         borderRadius: 6,
@@ -1746,14 +1772,14 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
                         background: "rgba(255,255,255,0.05)",
                         color: "#aaa",
                         fontSize: 10,
-                        cursor: loadingFixtures ? "not-allowed" : "pointer",
+                        cursor: loadingAdminEvents ? "not-allowed" : "pointer",
                         display: "flex",
                         alignItems: "center",
                         gap: 4
                       }}
                     >
                       <Icon name="refresh" size={10} />
-                      {loadingFixtures ? "..." : "Refresh"}
+                      {loadingAdminEvents ? "..." : "Refresh"}
                     </button>
                   </div>
                 </div>
@@ -1786,8 +1812,8 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
                   <div style={{ position: "relative", flex: 1 }}>
                     <Icon name="search" size={12} color="#555" style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
                     <input
-                      value={searchFixture}
-                      onChange={(e) => setSearchFixture(e.target.value)}
+                      value={searchEvent}
+                      onChange={(e) => setSearchEvent(e.target.value)}
                       placeholder="Search teams, leagues..."
                       style={{
                         width: "100%",
@@ -1808,47 +1834,47 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
               {error && <div style={{ padding: 8, marginBottom: 8, background: "rgba(244,67,54,0.15)", border: "1px solid rgba(244,67,54,0.3)", borderRadius: 6, color: "#e57373", fontSize: 11 }}>{error}</div>}
               {success && <div style={{ padding: 8, marginBottom: 8, background: "rgba(76,175,80,0.15)", border: "1px solid rgba(76,175,80,0.3)", borderRadius: 6, color: "#81c784", fontSize: 11 }}>{success}</div>}
 
-              {loadingFixtures ? (
+              {loadingAdminEvents ? (
                 <div style={{ textAlign: "center", padding: 40, color: "#555" }}>
-                  <div style={{ fontSize: 12 }}>Loading fixtures...</div>
+                  <div style={{ fontSize: 12 }}>Loading events...</div>
                 </div>
-              ) : fixtures.length === 0 ? (
+              ) : adminEvents.length === 0 ? (
                 <div style={{ textAlign: "center", padding: 40, color: "#444" }}>
                   <Icon name="calendar" size={24} color="#444" style={{ marginBottom: 8, opacity: 0.4 }} />
-                  <p style={{ margin: 0, fontSize: 12 }}>No fixtures yet</p>
+                  <p style={{ margin: 0, fontSize: 12 }}>No events yet</p>
                 </div>
               ) : (
                 <>
-                  {getFilteredFixtures().length > 0 && (
+                  {getFilteredEvents().length > 0 && (
                     <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "rgba(255,255,255,0.02)", borderRadius: 6, marginBottom: 4 }}>
                       <button
-                        onClick={toggleSelectAllFixtures}
+                        onClick={toggleSelectAllEvents}
                         style={{
                           width: 18,
                           height: 18,
                           borderRadius: 4,
-                          border: selectedFixtures.length === getFilteredFixtures().length ? "2px solid #00e5ff" : "2px solid #444",
-                          background: selectedFixtures.length === getFilteredFixtures().length ? "#00e5ff" : "transparent",
+                          border: selectedEvents.length === getFilteredEvents().length ? "2px solid #00e5ff" : "2px solid #444",
+                          background: selectedEvents.length === getFilteredEvents().length ? "#00e5ff" : "transparent",
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
                           cursor: "pointer"
                         }}
                       >
-                        {selectedFixtures.length === getFilteredFixtures().length && <Icon name="check" size={12} color="#000" />}
+                        {selectedEvents.length === getFilteredEvents().length && <Icon name="check" size={12} color="#000" />}
                       </button>
                       <span style={{ fontSize: 11, color: "#aaa", fontWeight: 600 }}>
-                        Select All ({getFilteredFixtures().length})
+                        Select All ({getFilteredEvents().length})
                       </span>
                     </div>
                   )}
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    {getFilteredFixtures().map(fixture => {
-                      const isSelected = selectedFixtures.includes(fixture.id)
-                      const isExpanded = expandedFixture === fixture.id
-                      const broadcastCount = fixture.broadcasts?.length || 0
+                    {getFilteredEvents().map(evt => {
+                      const isSelected = selectedEvents.includes(evt.id)
+                      const isExpanded = expandedEvent === evt.id
+                      const broadcastCount = evt.broadcasts?.length || 0
                       return (
-                        <div key={fixture.id}>
+                        <div key={evt.id}>
                           <div
                             style={{
                               padding: 10,
@@ -1863,7 +1889,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
                             <button
                               onClick={(e) => {
                                 e.stopPropagation()
-                                toggleFixtureSelection(fixture.id)
+                                toggleEventSelection(evt.id)
                               }}
                               style={{
                                 width: 18,
@@ -1880,19 +1906,19 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
                             >
                               {isSelected && <Icon name="check" size={12} color="#000" />}
                             </button>
-                            <div style={{ flex: 1, minWidth: 0, cursor: "pointer" }} onClick={() => toggleFixtureExpand(fixture.id)}>
+                            <div style={{ flex: 1, minWidth: 0, cursor: "pointer" }} onClick={() => toggleEventExpand(evt.id)}>
                               <div style={{ fontSize: 11, color: "#fff", marginBottom: 4, fontWeight: 500 }}>
-                                {fixture.home && fixture.away ? `${fixture.home} vs ${fixture.away}` : fixture.event_name || fixture.league || 'Event'}
+                                {evt.home && evt.away ? `${evt.home} vs ${evt.away}` : evt.event_name || evt.league || 'Event'}
                               </div>
                               <div style={{ fontSize: 10, color: "#888", lineHeight: 1.4 }}>
-                                {fixture.sport_name} • {fixture.league}<br />
-                                {fixture.event_date} {fixture.event_time}
+                                {evt.sport_name} • {evt.league}<br />
+                                {evt.event_date} {evt.event_time}
                               </div>
                             </div>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation()
-                                toggleFixtureExpand(fixture.id)
+                                toggleEventExpand(evt.id)
                               }}
                               style={{
                                 padding: "2px 6px",
@@ -1926,7 +1952,7 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
                                 </div>
                               ) : (
                                 <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                                  {fixture.broadcasts.map(broadcast => (
+                                  {evt.broadcasts.map(broadcast => (
                                     <div key={broadcast.id} style={{
                                       padding: "6px 8px",
                                       background: "rgba(255,255,255,0.03)",
@@ -2719,13 +2745,13 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
       </div>
 
       {/* Confirm Delete Broadcasts Modal */}
-      {/* Confirm Delete Fixtures Modal */}
-      {showDeleteFixturesConfirm && (
+      {/* Confirm Delete Events Modal */}
+      {showDeleteEventsConfirm && (
         <ConfirmModal
-          onClose={() => setShowDeleteFixturesConfirm(false)}
-          onConfirm={handleBulkDeleteFixtures}
-          title="Delete Fixtures"
-          message={`Are you sure you want to delete ${selectedFixtures.length} fixture${selectedFixtures.length > 1 ? 's' : ''}? This will also delete all associated broadcasts and votes. This action cannot be undone.`}
+          onClose={() => setShowDeleteEventsConfirm(false)}
+          onConfirm={handleBulkDeleteEvents}
+          title="Delete Events"
+          message={`Are you sure you want to delete ${selectedEvents.length} event${selectedEvents.length > 1 ? 's' : ''}? This will also delete all associated broadcasts and votes. This action cannot be undone.`}
           confirmText="Delete"
           cancelText="Cancel"
           confirmColor="#e53935"

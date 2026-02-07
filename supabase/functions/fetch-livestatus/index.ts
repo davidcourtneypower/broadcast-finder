@@ -231,7 +231,7 @@ serve(async (req) => {
     const response = {
       success: status !== 'error',
       status,
-      livescoreEvents: livescoreEvents.length,
+      totalEvents: livescoreEvents.length,
       updated: updatedCount,
       notFound: notFoundCount,
       disappearedFinished: finishedCount,

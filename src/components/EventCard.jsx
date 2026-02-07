@@ -3,18 +3,26 @@ import { Icon } from './Icon'
 import { BroadcastPill } from './BroadcastPill'
 import { getTimezoneAbbreviation } from '../utils/timeFormatting'
 
-export const FixtureCard = ({ match, user, onVote, onRequestAuth, onAddBroadcast, onDeleteBroadcast, onRefreshBroadcasts, isAdmin, getSportColors, getFlag, formatTime, getStatus, getRelative, preferences }) => {
+export const EventCard = ({ match, user, onVote, onRequestAuth, onAddBroadcast, onDeleteBroadcast, onRefreshBroadcasts, isAdmin, getSportColors, getFlag, formatTime, getStatus, getRelative, preferences }) => {
   const [expanded, setExpanded] = useState(false)
   const [relativeTime, setRelativeTime] = useState('')
   const [sortBy, setSortBy] = useState('votes')
   const [sortAsc, setSortAsc] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+
+  // Auto-refresh broadcasts when expanding
+  useEffect(() => {
+    if (expanded && onRefreshBroadcasts) {
+      setRefreshing(true)
+      onRefreshBroadcasts(match.id).finally(() => setRefreshing(false))
+    }
+  }, [expanded])
   const col = getSportColors ? getSportColors(match.sport_name) : { accent: "#00e5ff", bg: "rgba(0,229,255,0.12)", glow: "rgba(0,229,255,0.25)" }
 
   // Format event time in user's timezone
   const { time: displayTime, dayLabel, fullDateTime } = formatTime(match.event_date, match.event_time)
 
-  // Use DB-driven status (set by livescore edge function, with starting-soon overlay from App.jsx)
+  // Use DB-driven status (set by livestatus edge function, with starting-soon overlay from App.jsx)
   const matchStatus = match.status || 'upcoming'
   const isLive = matchStatus === "live"
 
@@ -57,6 +65,9 @@ export const FixtureCard = ({ match, user, onVote, onRequestAuth, onAddBroadcast
         )}
         {matchStatus === "upcoming" && (
           <span style={{ fontSize: 9, fontWeight: 600, color: "#26a69a", background: "rgba(38,166,154,0.15)", padding: "1px 5px", borderRadius: 3, letterSpacing: 1, textTransform: "uppercase", fontFamily: "monospace", flexShrink: 0 }}>UPCOMING</span>
+        )}
+        {matchStatus === "unknown" && (
+          <span style={{ fontSize: 9, fontWeight: 700, color: "#ff9800", background: "rgba(255,152,0,0.15)", padding: "1px 5px", borderRadius: 3, letterSpacing: 1, textTransform: "uppercase", fontFamily: "monospace", flexShrink: 0 }}>UNKNOWN</span>
         )}
       </div>
       {match.home && match.away ? (
