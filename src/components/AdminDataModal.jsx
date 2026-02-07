@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Icon } from './Icon'
 import { supabase } from '../config/supabase'
 import { ConfirmModal } from './ConfirmModal'
@@ -51,6 +51,19 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
   const [importPreview, setImportPreview] = useState(null)
   const [cleaningUp, setCleaningUp] = useState(false)
   const [cleanupResult, setCleanupResult] = useState(null)
+  const [showScrollHint, setShowScrollHint] = useState(false)
+  const [visibleFixtureCount, setVisibleFixtureCount] = useState(30)
+  const scrollRef = useRef(null)
+
+  const checkScroll = useCallback(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100
+    setShowScrollHint(el.scrollHeight - el.scrollTop - el.clientHeight > 10)
+    if (nearBottom) {
+      setVisibleFixtureCount(prev => prev + 30)
+    }
+  }, [])
 
   // Detect and preview import data
   const detectImportType = (jsonString) => {
@@ -769,6 +782,11 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
     }
   }, [activeTab, logTypeFilter])
 
+  // Re-check scroll indicator when tab or data changes
+  useEffect(() => {
+    requestAnimationFrame(checkScroll)
+  }, [activeTab, fixtures, users, logs, checkScroll])
+
   const toggleDate = (date) => {
     setSelectedDates(prev =>
       prev.includes(date)
@@ -890,7 +908,8 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
         </div>
 
         {/* Tab Content */}
-        <div className="hidden-scrollbar" style={{ flex: 1, overflowY: "auto", overflowX: "hidden", minHeight: 0 }}>
+        <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
+        <div ref={scrollRef} onScroll={checkScroll} className="hidden-scrollbar" style={{ height: "100%", overflowY: "auto", overflowX: "hidden" }}>
           {activeTab === 'import' && (
             <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
               <div style={{ fontSize: 11, color: "#888", marginBottom: 12, lineHeight: 1.5 }}>
@@ -980,6 +999,61 @@ Example broadcasts:
 
           {activeTab === 'fetch' && (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              {/* Combined results area */}
+              {(fetchResult || broadcastResult || (cleanupResult && cleanupResult.success && cleanupResult.deleted?.matches > 0)) && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {fetchResult && (
+                    <div style={{
+                      padding: 10,
+                      background: getStatusBg(fetchResult.status),
+                      border: `1px solid ${getStatusBorder(fetchResult.status)}`,
+                      borderRadius: 6,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                    }}>
+                      <Icon name="calendar" size={12} color="#00e5ff" />
+                      <div style={{ fontSize: 11, color: "#aaa", lineHeight: 1.4 }}>
+                        Found {fetchResult.eventsFound} events across {fetchResult.sportsFound} sports, inserted {fetchResult.eventsInserted}
+                      </div>
+                    </div>
+                  )}
+                  {broadcastResult && (
+                    <div style={{
+                      padding: 10,
+                      background: getStatusBg(broadcastResult.status),
+                      border: `1px solid ${getStatusBorder(broadcastResult.status)}`,
+                      borderRadius: 6,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                    }}>
+                      <Icon name="tv" size={12} color="#ff9f1c" />
+                      <div style={{ fontSize: 11, color: "#aaa", lineHeight: 1.4 }}>
+                        Found {broadcastResult.tvEventsFound} TV events, matched {broadcastResult.matched}, inserted {broadcastResult.broadcastsInserted} broadcasts
+                        {broadcastResult.unmatched > 0 && `, ${broadcastResult.unmatched} unmatched`}
+                      </div>
+                    </div>
+                  )}
+                  {cleanupResult && cleanupResult.success && cleanupResult.deleted?.matches > 0 && (
+                    <div style={{
+                      padding: 10,
+                      background: "rgba(76,175,80,0.15)",
+                      border: "1px solid rgba(76,175,80,0.3)",
+                      borderRadius: 6,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                    }}>
+                      <Icon name="check" size={12} color="#81c784" />
+                      <div style={{ fontSize: 11, color: "#81c784", lineHeight: 1.4 }}>
+                        Deleted: {cleanupResult.deleted.matches} matches, {cleanupResult.deleted.broadcasts} broadcasts, {cleanupResult.deleted.votes} votes
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div>
                 <div style={{ fontSize: 12, color: "#aaa", marginBottom: 8, fontWeight: 600 }}>Select Dates</div>
                 <div style={{ display: "flex", gap: 6 }}>
@@ -1033,19 +1107,6 @@ Example broadcasts:
                 <div style={{ fontSize: 11, color: "#888", marginBottom: 8 }}>
                   Fetch all sports fixtures from TheSportsDB for selected dates.
                 </div>
-                {fetchResult && (
-                  <div style={{
-                    padding: 12,
-                    marginBottom: 8,
-                    background: getStatusBg(fetchResult.status),
-                    border: `1px solid ${getStatusBorder(fetchResult.status)}`,
-                    borderRadius: 8
-                  }}>
-                    <div style={{ fontSize: 11, color: "#aaa", lineHeight: 1.6 }}>
-                      Found {fetchResult.eventsFound} events across {fetchResult.sportsFound} sports, inserted {fetchResult.eventsInserted}
-                    </div>
-                  </div>
-                )}
                 <button
                   onClick={handleFetchFixtures}
                   disabled={selectedDates.length === 0 || fetchingFixtures}
@@ -1070,20 +1131,6 @@ Example broadcasts:
                 <div style={{ fontSize: 11, color: "#888", marginBottom: 8 }}>
                   Fetch TV broadcast data and link to existing fixtures.
                 </div>
-                {broadcastResult && (
-                  <div style={{
-                    padding: 12,
-                    marginBottom: 8,
-                    background: getStatusBg(broadcastResult.status),
-                    border: `1px solid ${getStatusBorder(broadcastResult.status)}`,
-                    borderRadius: 8
-                  }}>
-                    <div style={{ fontSize: 11, color: "#aaa", lineHeight: 1.6 }}>
-                      Found {broadcastResult.tvEventsFound} TV events, matched {broadcastResult.matched}, inserted {broadcastResult.broadcastsInserted} broadcasts
-                      {broadcastResult.unmatched > 0 && `, ${broadcastResult.unmatched} unmatched`}
-                    </div>
-                  </div>
-                )}
                 <button
                   onClick={handleFetchBroadcasts}
                   disabled={selectedDates.length === 0 || fetchingBroadcasts}
@@ -1104,25 +1151,10 @@ Example broadcasts:
               </div>
 
               {/* Cleanup section */}
-              <div style={{ borderTop: "1px solid #2a2a4a", paddingTop: 16 }}>
+              <div>
                 <div style={{ fontSize: 11, color: "#888", marginBottom: 10, lineHeight: 1.5 }}>
                   Remove all fixtures, broadcasts, and votes for past matches (before today).
                 </div>
-
-                {cleanupResult && cleanupResult.success && cleanupResult.deleted?.matches > 0 && (
-                  <div style={{
-                    padding: 12,
-                    marginBottom: 10,
-                    background: "rgba(76,175,80,0.15)",
-                    border: "1px solid rgba(76,175,80,0.3)",
-                    borderRadius: 8
-                  }}>
-                    <div style={{ fontSize: 11, color: "#81c784", lineHeight: 1.6 }}>
-                      Deleted: {cleanupResult.deleted.matches} matches, {cleanupResult.deleted.broadcasts} broadcasts, {cleanupResult.deleted.votes} votes
-                    </div>
-                  </div>
-                )}
-
                 <button
                   onClick={handleCleanup}
                   disabled={cleaningUp}
@@ -1202,7 +1234,7 @@ Example broadcasts:
                   {/* Sport filter */}
                   <select
                     value={sportFilter}
-                    onChange={(e) => setSportFilter(e.target.value)}
+                    onChange={(e) => { setSportFilter(e.target.value); setVisibleFixtureCount(30) }}
                     style={{
                       padding: "6px 10px",
                       borderRadius: 6,
@@ -1226,7 +1258,7 @@ Example broadcasts:
                     <Icon name="search" size={12} color="#555" style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
                     <input
                       value={searchFixture}
-                      onChange={(e) => setSearchFixture(e.target.value)}
+                      onChange={(e) => { setSearchFixture(e.target.value); setVisibleFixtureCount(30) }}
                       placeholder="Search teams, leagues..."
                       style={{
                         width: "100%",
@@ -1281,8 +1313,8 @@ Example broadcasts:
                       </span>
                     </div>
                   )}
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 350, overflowY: "auto" }}>
-                    {getFilteredFixtures().map(fixture => {
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {getFilteredFixtures().slice(0, visibleFixtureCount).map(fixture => {
                       const isSelected = selectedFixtures.includes(fixture.id)
                       const isExpanded = expandedFixture === fixture.id
                       const broadcastCount = fixture.broadcasts?.length || 0
@@ -1459,7 +1491,7 @@ Example broadcasts:
                   <p style={{ margin: 0, fontSize: 12 }}>No users found</p>
                 </div>
               ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 400, overflowY: "auto" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {getFilteredUsers().map(user => {
                     const isBanned = bannedUsers.includes(user.uuid)
                     const isProcessing = processingBan === user.uuid
@@ -1577,7 +1609,7 @@ Example broadcasts:
                   <p style={{ margin: 0, fontSize: 12 }}>No logs yet</p>
                 </div>
               ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 400, overflowY: "auto" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {logs.map(log => (
                     <div
                       key={log.id}
@@ -1660,6 +1692,24 @@ Example broadcasts:
                   ))}
                 </div>
               )}
+            </div>
+          )}
+        </div>
+          {showScrollHint && (
+            <div style={{
+              position: "absolute",
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: 32,
+              background: "linear-gradient(transparent, #1a1a2e)",
+              display: "flex",
+              alignItems: "flex-end",
+              justifyContent: "center",
+              paddingBottom: 4,
+              pointerEvents: "none",
+            }}>
+              <Icon name="chevDown" size={14} color="#666" />
             </div>
           )}
         </div>

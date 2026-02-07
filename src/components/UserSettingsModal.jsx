@@ -137,10 +137,9 @@ export const UserSettingsModal = ({ onClose, onSave, user, headerRef }) => {
           border: "1px solid #2a2a4a",
           borderTopColor: "transparent",
           boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
-          maxHeight: `calc(90dvh - ${headerHeight}px)`,
           display: "flex",
           flexDirection: "column",
-          padding: 24,
+          padding: "20px 24px",
         }}
       >
         {/* Header */}
@@ -154,7 +153,7 @@ export const UserSettingsModal = ({ onClose, onSave, user, headerRef }) => {
           </button>
         </div>
 
-        <div className="hidden-scrollbar" style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
+        <div style={{ minHeight: 0 }}>
         {loading ? (
           <div style={{ textAlign: "center", padding: "40px 0", color: "#666" }}>
             Loading preferences...
@@ -162,53 +161,36 @@ export const UserSettingsModal = ({ onClose, onSave, user, headerRef }) => {
         ) : (
           <>
             {/* Timezone Setting */}
-            <div style={{ marginBottom: 24 }}>
-              <label style={{ color: "#aaa", fontSize: 11, fontFamily: "monospace", textTransform: "uppercase", letterSpacing: 1, display: "block", marginBottom: 12 }}>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ color: "#aaa", fontSize: 11, fontFamily: "monospace", textTransform: "uppercase", letterSpacing: 1, display: "block", marginBottom: 8 }}>
                 Timezone
               </label>
-              <div style={{
-                padding: "12px",
-                borderRadius: 8,
-                background: "rgba(0,229,255,0.08)",
-                border: "1px solid rgba(0,229,255,0.2)",
-                marginBottom: 12
-              }}>
-                <div style={{ color: "#00e5ff", fontSize: 11, fontWeight: 600, marginBottom: 6 }}>
-                  Quick Option: Auto-Detect
-                </div>
-                <button
-                  onClick={detectBrowserTimezone}
-                  style={{
-                    width: "100%",
-                    padding: "8px 12px",
-                    borderRadius: 6,
-                    border: "1px solid rgba(0,229,255,0.4)",
-                    background: "rgba(0,229,255,0.15)",
-                    color: "#00e5ff",
-                    fontSize: 12,
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 6,
-                  }}
-                >
-                  <Icon name="clock" size={13} />
-                  Detect from Device
-                </button>
-                <div style={{ color: "#666", fontSize: 10, marginTop: 6, textAlign: "center" }}>
-                  Automatically use your device's timezone
-                </div>
-              </div>
-
-              <div style={{ color: "#888", fontSize: 11, marginBottom: 8, textAlign: "center" }}>
-                — OR —
-              </div>
+              <button
+                onClick={detectBrowserTimezone}
+                style={{
+                  width: "100%",
+                  padding: "8px 12px",
+                  borderRadius: 6,
+                  border: "1px solid rgba(0,229,255,0.4)",
+                  background: "rgba(0,229,255,0.15)",
+                  color: "#00e5ff",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 6,
+                  marginBottom: 8,
+                }}
+              >
+                <Icon name="clock" size={13} />
+                Auto-Detect from Device
+              </button>
 
               <div style={{ marginBottom: 8 }}>
                 <div style={{ color: "#888", fontSize: 11, marginBottom: 6 }}>
-                  Manually Select Timezone:
+                  Or select manually:
                 </div>
                 <select
                   value={preferences.timezone}
@@ -252,7 +234,7 @@ export const UserSettingsModal = ({ onClose, onSave, user, headerRef }) => {
             </div>
 
             {/* Time Format Setting */}
-            <div style={{ marginBottom: 24 }}>
+            <div style={{ marginBottom: 16 }}>
               <label style={{ color: "#aaa", fontSize: 11, fontFamily: "monospace", textTransform: "uppercase", letterSpacing: 1, display: "block", marginBottom: 8 }}>
                 Time Format
               </label>
@@ -291,7 +273,7 @@ export const UserSettingsModal = ({ onClose, onSave, user, headerRef }) => {
             </div>
 
             {/* Save Button */}
-            <div style={{ display: "flex", gap: 8, paddingTop: 8 }}>
+            <div style={{ display: "flex", gap: 8 }}>
               <button
                 onClick={handleClose}
                 style={{
