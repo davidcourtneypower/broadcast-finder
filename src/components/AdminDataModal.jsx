@@ -388,7 +388,11 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
         body: { dates: selectedDates, trigger: 'manual' }
       })
 
-      if (fnError) throw fnError
+      if (fnError) {
+        let detail = fnError.message
+        try { if (fnError.context?.json) { const body = await fnError.context.json(); detail = body.error || JSON.stringify(body) } } catch {}
+        throw new Error(detail)
+      }
       setEventsResult(data)
 
       if (data.success || data.status === 'partial') {
@@ -414,7 +418,11 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
         body: { dates: selectedDates, trigger: 'manual' }
       })
 
-      if (fnError) throw fnError
+      if (fnError) {
+        let detail = fnError.message
+        try { if (fnError.context?.json) { const body = await fnError.context.json(); detail = body.error || JSON.stringify(body) } } catch {}
+        throw new Error(detail)
+      }
       setBroadcastResult(data)
 
       if (data.success || data.status === 'partial') {
@@ -439,15 +447,19 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
         body: {}
       })
 
-      if (fnError) throw fnError
+      if (fnError) {
+        let detail = fnError.message
+        try { if (fnError.context?.json) { const body = await fnError.context.json(); detail = body.error || JSON.stringify(body) } } catch {}
+        throw new Error(detail)
+      }
       setCleanupResult(data)
 
       if (data.success) {
-        const { matches, broadcasts, votes } = data.deleted
-        if (matches === 0) {
+        const { events, broadcasts, votes } = data.deleted
+        if (events === 0) {
           setSuccess('No old data to clean up')
         } else {
-          setSuccess(`Cleaned up ${matches} match${matches !== 1 ? 'es' : ''}, ${broadcasts} broadcast${broadcasts !== 1 ? 's' : ''}, ${votes} vote${votes !== 1 ? 's' : ''}`)
+          setSuccess(`Cleaned up ${events} event${events !== 1 ? 's' : ''}, ${broadcasts} broadcast${broadcasts !== 1 ? 's' : ''}, ${votes} vote${votes !== 1 ? 's' : ''}`)
           setTimeout(() => { onUpdate() }, 1000)
         }
       } else {
@@ -470,7 +482,11 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
         body: { trigger: 'manual' }
       })
 
-      if (fnError) throw fnError
+      if (fnError) {
+        let detail = fnError.message
+        try { if (fnError.context?.json) { const body = await fnError.context.json(); detail = body.error || JSON.stringify(body) } } catch {}
+        throw new Error(detail)
+      }
       setLivestatusResult(data)
 
       if (data.success) {
@@ -496,7 +512,11 @@ export const AdminDataModal = ({ onClose, onUpdate, currentUserEmail, headerRef 
         body: { trigger: 'manual' }
       })
 
-      if (fnError) throw fnError
+      if (fnError) {
+        let detail = fnError.message
+        try { if (fnError.context?.json) { const body = await fnError.context.json(); detail = body.error || JSON.stringify(body) } } catch {}
+        throw new Error(detail)
+      }
       setReferenceDataResult(data)
 
       if (data.success || data.status === 'partial') {
